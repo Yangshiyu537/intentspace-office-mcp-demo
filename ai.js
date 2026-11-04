@@ -118,7 +118,7 @@ try {
   const response = await fetch('/api/config', { cache: 'no-store' });
   if (!response.ok) throw new Error();
   const config = await response.json();
-  session.configureLocal({available:config.local_key_available===true,model:config.local_model??'gpt-6.1-sol'});
+  session.configureLocal({available:config.local_key_available===true,model:config.local_model});
   if(session.source==='local')$('apiModel').value=session.model;
   aiEnabled = config.ai_enabled === true;
   $('apiEndpoint').value = config.endpoint;

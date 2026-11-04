@@ -245,6 +245,14 @@ function openRoomDetails(id){
   inspectedRoomId=id;roomBookingPage=0;renderRoomDetails();
   if(!$('roomDialog').open)$('roomDialog').showModal();
 }
+let localKeyCheck='checking';
+function renderKeyConfigBadge() {
+  const source=apiSession.source;
+  const status=source==='page'?'pageKeyConfigured':source==='local'?'localKeyConfigured':
+    localKeyCheck==='ready'?'keyNotConfigured':localKeyCheck==='failed'?'keyCheckFailed':'keyChecking';
+  $('keyConfigBadge').textContent=t(status);
+  $('keyConfigBadge').classList.toggle('connected',Boolean(source));
+}
 function setupLanguage() {
   equipmentUI?.languageChanged();
   const translate=translator(locale);
@@ -263,6 +271,7 @@ function setupLanguage() {
   $('keyStatus').textContent=t(apiSession.source==='local'?'localKeyReady':apiSession.configured?'keyReady':'noKey');
   $('keyBadge').textContent=t(apiSession.source==='local'?'localKeyBadge':apiSession.configured?'withKey':'noKey');
   $('keyBadge').classList.toggle('connected',apiSession.configured);
+  renderKeyConfigBadge();
   if(workspace)$('today').textContent=workspace.today;
   calendarUI?.render();
   renderCalendarInput();
@@ -638,9 +647,11 @@ $('language').addEventListener('change',()=>{
 });
 async function loadLocalSettings(){
   let config;
+  localKeyCheck='checking';renderKeyConfigBadge();
   try{config=await api('config');}
-  catch(error){apiSession.configureLocal({available:false});$('localKeyControls').hidden=false;setupLanguage();throw error;}
-  apiSession.configureLocal({available:config.local_key_available===true,model:config.local_model??'gpt-6.1-sol'});
+  catch(error){localKeyCheck='failed';apiSession.configureLocal({available:false});$('localKeyControls').hidden=false;setupLanguage();throw error;}
+  localKeyCheck='ready';
+  apiSession.configureLocal({available:config.local_key_available===true,model:config.local_model});
   $('localKeyControls').hidden=config.local_model===undefined;
   if(apiSession.source!=='page')$('model').value=apiSession.model;
   setupLanguage();

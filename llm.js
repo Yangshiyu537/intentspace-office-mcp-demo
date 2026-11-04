@@ -2,13 +2,15 @@ import { HttpError, readJson, assertSameOrigin } from './http-utils.js';
 import { validateGptExtraction, gptUncertaintyFields } from './day-plan.js';
 import { allocationMeaning, allocationSelectionSchema, groundAllocationSelection } from './office-improvements.js';
 
+import { DEFAULT_MODEL } from './session.js';
+
 const ENDPOINT = 'https://api.openai.com/v1/responses';
 const MAX_ROUNDS = 6;
 const MAX_TOOL_CALLS = 12;
 
 // Local Node entry point only. Never add this configuration to Worker bindings.
 export function parseLocalApiConfig(values) {
-  const key=(values.OPENAI_API_KEY??'').trim(),model=(values.OPENAI_MODEL??'gpt-6.1-sol').trim();
+  const key=(values.OPENAI_API_KEY??'').trim(),model=(values.OPENAI_MODEL??DEFAULT_MODEL).trim();
   if((key&&!/^[A-Za-z0-9_-]{16,256}$/.test(key))||!/^gpt-[a-zA-Z0-9.-]{1,90}$/.test(model))throw new HttpError(400,'local_config_invalid');
   return {key,model};
 }

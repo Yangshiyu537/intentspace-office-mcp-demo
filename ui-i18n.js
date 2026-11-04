@@ -505,6 +505,11 @@ Object.assign(messages.ja,{calendarExportEmpty:'この期間に取り込める�
 Object.assign(messages.en,{calendarExportEmpty:'There are no events in this range. Check the dates or add events in Calendar.',calendarRangeEdit:'Change date range',calendarRangeHide:'Hide date range'});
 
 const localKeyMessages={
+  localKeyConfigured:['設定済み（本機）','Configured on this computer'],
+  pageKeyConfigured:['設定済み（このページ）','Configured for this page'],
+  keyNotConfigured:['未設定','Not configured'],
+  keyChecking:['設定を確認中…','Checking configuration…'],
+  keyCheckFailed:['設定を確認できません','Could not check configuration'],
   localKeyReady:['本機のデフォルトKeyをサーバー側で使用します。接続・権限は送信時に確認します。','Using the local default key on the server. Connectivity and permissions are checked on submission.'],
   localKeyBadge:['本機のKeyを使用','Using local key'],localKeyRestored:['一時Keyを消去し、本機のデフォルトKeyに戻りました。','Page key cleared. Restored the local default key.'],
   localKeyHint:['.env.local にKeyを保存してから下のボタンで読み直します。本機のKeyはページへ返しません。ページに別のKeyを入力すると、そのKeyを優先します。','Save your key in .env.local, then reload the local settings below. The local key is never returned to this page. A key entered on this page takes priority.'],

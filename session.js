@@ -1,12 +1,14 @@
+export const DEFAULT_MODEL = 'gpt-5.4';
+
 export class ApiSession {
   #key = '';
   #model = '';
   #controller = null;
   #history = [];
   #localAvailable = false;
-  #localModel = 'gpt-6.1-sol';
+  #localModel = DEFAULT_MODEL;
 
-  configureLocal({available=false,model='gpt-6.1-sol'}={}) {
+  configureLocal({available=false,model=DEFAULT_MODEL}={}) {
     if(typeof available!=='boolean'||!/^gpt-[a-zA-Z0-9.-]{1,90}$/.test(model))throw new Error('local_config_invalid');
     this.#localAvailable=available;
     this.#localModel=model;

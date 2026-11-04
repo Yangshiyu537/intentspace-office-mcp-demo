@@ -18,7 +18,7 @@ import { parseEnv } from 'node:util';
 async function localApiConfig(){
   let text;
   try{text=await readFile(new URL('./.env.local',import.meta.url),'utf8');}
-  catch(error){if(error.code==='ENOENT')return {key:'',model:'gpt-6.1-sol'};throw new HttpError(500,'local_config_read');}
+  catch(error){if(error.code==='ENOENT')return parseLocalApiConfig({});throw new HttpError(500,'local_config_read');}
   if(text.length>8000)throw new HttpError(400,'local_config_invalid');
   try{return parseLocalApiConfig(parseEnv(text));}
   catch(error){if(error instanceof HttpError)throw error;throw new HttpError(400,'local_config_invalid');}

@@ -419,7 +419,7 @@ test('本地Key：页面只持有可用标志，网页覆盖优先，清除恢�
   session.configureLocal({available:false});assert.equal(session.configured,false);assert.throws(()=>session.begin('missing'),/API/);
 });
 test('本地Key配置：空值不自动启用，Key和模型格式错误不回显内容',()=>{
-  assert.deepEqual(parseLocalApiConfig({}),{key:'',model:'gpt-6.1-sol'});
+  assert.deepEqual(parseLocalApiConfig({}),{key:'',model:'gpt-5.4'});
   assert.equal(parseLocalApiConfig({OPENAI_API_KEY:' '+fakeKey+' ',OPENAI_MODEL:'gpt-4.1'}).key,fakeKey);
   for(const values of [{OPENAI_API_KEY:'bad key private value'},{OPENAI_MODEL:'private invalid model'}])
     assert.throws(()=>parseLocalApiConfig(values),error=>error.message==='local_config_invalid'&&!error.message.includes('private'));
