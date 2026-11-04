@@ -507,7 +507,7 @@ test('GPTループ：モックモデルが実際のMCPを呼び、結果を次�
       const body = JSON.parse(options.body);
       assert.equal(body.store, false);
       assert.equal(body.tools.length, 6);
-      assert.equal(options.redirect, 'error');
+      assert.equal(options.redirect, 'manual');
       requests++;
       if (requests === 1) return Response.json({ output: [{ type: 'function_call', call_id: 'call1', name: 'summarize_reservations', arguments: JSON.stringify({ start_date: '2026-02-01', end_date: '2026-02-28', limit: 30 }) }], usage: { input_tokens: 10, output_tokens: 5 } });
       const toolOutput = body.input.find(item => item.type === 'function_call_output');
@@ -519,6 +519,23 @@ test('GPTループ：モックモデルが実際のMCPを呼び、結果を次�
     assert.equal(result.trace[0].result.structuredContent.result.total_records, 4);
     assert.equal(result.usage.input_tokens, 25);
     assert.equal(JSON.stringify(result).includes(fakeKey), false);
+  });
+});
+
+test('GPT通信：リダイレクト先にKeyを送らず、上流HTTP状態を返す', async () => {
+  await withMcpClient(fixture, async client => {
+    let requests = 0;
+    await assert.rejects(answerQuestion(client, fakeKey, chat, { fetchImpl: async (url, options) => {
+      requests++;
+      assert.equal(url, 'https://api.openai.com/v1/responses');
+      assert.equal(options.redirect, 'manual');
+      return new Response('Moved', { status: 307, headers: { Location: 'https://example.invalid/redirect' } });
+    } }), error => {
+      assert.equal(error.message, 'api_upstream_error');
+      assert.deepEqual(error.diagnostics, { source: 'openai', upstream_status: 307 });
+      return true;
+    });
+    assert.equal(requests, 1);
   });
 });
 

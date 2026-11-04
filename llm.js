@@ -59,12 +59,17 @@ export async function requestModel(apiKey, body, signal, fetchImpl) {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      redirect: 'error',
+      // Workers supports manual redirects. Never forward the bearer key to another URL.
+      redirect: 'manual',
       signal,
     });
   } catch {
     signal?.throwIfAborted();
     throw new HttpError(502,'api_network',{source:'openai'});
+  }
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new HttpError(502, 'api_upstream_error', { source: 'openai', upstream_status: response.status });
   }
   if (!response.ok) {
     let upstream;
