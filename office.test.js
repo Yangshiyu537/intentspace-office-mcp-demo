@@ -764,7 +764,7 @@ const today='2026-10-20';
 const need={date:'2026-10-21',time:'10:00',duration:60,people:4,kind:'meeting',features:['monitor']};
 
 // Minimal DOM adapter for the actual employee event handlers. Visual QA uses a real browser.
-async function employeeUi({dayParser,calendarAgent,calendarFault,equipmentData,equipmentAgent,equipmentFault,localConfig,localDefaultKey,autoKey=true,improvementAgent=mockImprovementAgent,transportFault,role='employee',now=()=>new Date(today+'T01:00:00Z'),initialReservations=[],includeLegacyPresets=true}={}){
+async function employeeUi({dayParser,answerer,calendarAgent,calendarFault,equipmentData,equipmentAgent,equipmentFault,localConfig,localDefaultKey,autoKey=true,improvementAgent=mockImprovementAgent,transportFault,role='employee',now=()=>new Date(today+'T01:00:00Z'),initialReservations=[],includeLegacyPresets=true}={}){
   const elements=new Map();
   class Element {
     constructor(id=''){this.id=id;this.dataset={};this.disabled=false;this.value='';this.checked=false;this.options=[];this.clientHeight=400;this.textContent='';this.events={};this.attributes={};this.open=false;
@@ -801,7 +801,7 @@ async function employeeUi({dayParser,calendarAgent,calendarFault,equipmentData,e
   const uiWindow={events:{},addEventListener(type,callback){(this.events[type]??=[]).push(callback);}};
   const get=id=>elements.get(id),document={title:'',getElementById:get,querySelector:()=>new Element(),
     querySelectorAll:selector=>selector==='[data-area]'?areaButtons:selector==='[data-admin]'?adminButtons:selector.includes('#intentForm button')?[get('parseButton')]:[],documentElement:{}};
-  const handle=createOfficeService({now,dayParser:dayParser??mockDayParser,calendarAgent,improvementAgent,equipmentData,equipmentAgent,initialReservations,includeLegacyPresets});
+  const handle=createOfficeService({now,dayParser:dayParser??mockDayParser,answerer,calendarAgent,improvementAgent,equipmentData,equipmentAgent,initialReservations,includeLegacyPresets});
   let nextWorkspace=null;
   async function request(path,options={}){
     options.signal?.throwIfAborted();
@@ -815,14 +815,18 @@ async function employeeUi({dayParser,calendarAgent,calendarFault,equipmentData,e
   }
   const source=readFileSync(new URL('./office.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
   const run=new (Object.getPrototypeOf(async function(){}).constructor)('ApiSession','ReviewComparison','translator','errorKey','applyLanguage','document','window','fetch','location','history','innerWidth','innerHeight','matchMedia','setInterval','clearInterval','layoutAreas','layoutPosition','renderOfficeLayout','createCalendarUI','createEquipmentFeedbackUI','renderSuggestionBoard','suggestionText',source+'\nreturn {sync,showBooking,isWorking:()=>working};');
+  const location = new URL(role==='admin'?'/admin?lang=en':'/office.html?lang=en','http://demo.test');
+  const history = { pushState(_state,_title,url){location.href=url;}, replaceState(_state,_title,url){location.href=url;} };
   const controller=await run(ApiSession,ReviewComparison,translator,errorKey,value=>{document.documentElement.lang=value;},document,uiWindow,request,
-    {search:'?lang=en',pathname:role==='admin'?'/admin':'/office.html',href:'http://demo.test/'+(role==='admin'?'admin':'office.html')+'?lang=en'}, {replaceState(){}},1280,720,()=>({matches:true}),()=>1,()=>{},layoutAreas,layoutPosition,renderOfficeLayout,createCalendarUI,createEquipmentFeedbackUI,renderSuggestionBoard,suggestionText);
+    location,history,1280,720,()=>({matches:true}),()=>1,()=>{},layoutAreas,layoutPosition,renderOfficeLayout,createCalendarUI,createEquipmentFeedbackUI,renderSuggestionBoard,suggestionText);
   async function fire(element,type,event={}){
     for(const listener of element.events[type]??[])await listener({preventDefault(){},...event});
     for(let i=0;controller.isWorking();i++){if(i>1000)throw new Error('UI remained busy');await new Promise(resolve=>setImmediate(resolve));}
   }
   if(!dayParser&&autoKey){get('key').value='test_key_not_real_1234567890';get('model').value='gpt-4.1-mini';await fire(get('keyForm'),'submit');}
-  return {get,controller,request,queueSnapshot:value=>{nextWorkspace=value;},
+  return {get,controller,request,location,queueSnapshot:value=>{nextWorkspace=value;},
+    restoreRoute:async url=>{location.href=new URL(url,location);await fire(uiWindow,'popstate');},
+    ask:async question=>{get('adminQuestion').value=question;await fire(get('adminAskForm'),'submit');},
     configureGpt:async()=>{get('key').value='test_key_not_real_1234567890';get('model').value='gpt-4.1-mini';await fire(get('keyForm'),'submit');},
     submit:async message=>{get('intent').value=message;await fire(get('intentForm'),'submit');},
     attend:async(room,time)=>{get('attendanceRoom').value=room;get('attendanceTime').value=time;await fire(get('attendanceForm'),'submit');},
@@ -2161,6 +2165,33 @@ test('设备来源安全：HTML与评论中的指令按原文显示，无模型�
   const failed=await employeeUi({role:'admin',equipmentData:{source:'error'}});await failed.adminSection('equipment');assert.match(failed.get('adminResults').innerHTML,/could not be loaded/);
   assert.throws(()=>createEquipmentFeedback({satisfactionRows:[{wrong:'columns'}],spaceRows:[],sources:{}}),/equipment_read_error/);
 });
+test('社員・管理者の往復と履歴移動で一時Keyを共有し、消去後は送信しない', async () => {
+  const keys = [];
+  const ui = await employeeUi({
+    dayParser: async (key,...args) => { keys.push(key); return mockDayParser(key,...args); },
+    answerer: async (_client,key) => { keys.push(key); return { answer:'Workspace answer', trace:[], usage:{} }; },
+  });
+  await ui.configureGpt();
+  await ui.tab('adminLink');
+  assert.equal(ui.location.pathname,'/admin');
+  assert.equal(ui.get('adminView').hidden,false);
+  assert.equal(ui.get('employeeView').hidden,true);
+  await ui.adminSection('ai');
+  await ui.ask('What is booked?');
+  await ui.tab('employeeLink');
+  assert.equal(ui.location.pathname,'/office.html');
+  assert.equal(ui.get('employeeView').hidden,false);
+  await ui.submit('13:00から4人で30分の会議');
+  await ui.restoreRoute('/admin?lang=en');
+  await ui.ask('What is booked?');
+  assert.deepEqual(keys,Array(3).fill('test_key_not_real_1234567890'));
+  await ui.tab('clearKey');
+  await ui.tab('employeeLink');
+  await ui.submit('13:00から4人で30分の会議');
+  assert.equal(keys.length,3);
+  assert.equal(ui.get('keyConfigBadge').textContent,'Not configured');
+});
+
 test('本地Key界面：默认自动可用、网页覆盖、清除恢复，所有分析继续由本人点击',async()=>{
   const seen=[],key='test_local_default_key_12345';
   const ui=await employeeUi({role:'admin',autoKey:false,localConfig:{local_key_available:true,local_model:'gpt-4.1-mini'},localDefaultKey:key,

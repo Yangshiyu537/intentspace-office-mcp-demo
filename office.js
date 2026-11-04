@@ -11,7 +11,7 @@ const comparison = new ReviewComparison();
 const demoComparison = new ReviewComparison();
 let locale = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ja';
 let t = translator(locale);
-const admin = location.pathname === '/admin';
+let admin = location.pathname === '/admin';
 let workspace = null, plan = null, agendaTab = 'proposals', agendaIndex = 0, pane = 'plan';
 let selectedBookingId=null;
 let inspectedRoomId=null,roomBookingPage=0;
@@ -645,6 +645,35 @@ $('language').addEventListener('change',()=>{
   const url=new URL(location.href);url.searchParams.set('lang',locale);history.replaceState(null,'',url);
   setupLanguage();
 });
+async function applyOfficeRoute(url) {
+  const nextAdmin = url.pathname === '/admin';
+  const nextLocale = url.searchParams.get('lang') === 'en' ? 'en' : 'ja';
+  const roleChanged = admin !== nextAdmin;
+  if (!roleChanged && locale === nextLocale) return;
+  admin = nextAdmin;
+  locale = nextLocale;
+  if (roleChanged) {
+    historyGeneration++;
+    liveGeneration++;
+    tell(admin ? 'adminReady' : 'ready');
+  }
+  setupLanguage();
+  if (roleChanged && admin && workspace) {
+    try { await refreshAdminSection(); }
+    catch (error) { if (!disposed && admin) showError(error); }
+  }
+}
+for (const [link, path] of [[$('employeeLink'), '/office.html'], [$('adminLink'), '/admin'], [document.querySelector('.brand'), '/office.html']]) {
+  link.addEventListener('click', event => {
+    if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (admin === (path === '/admin')) return;
+    const url = new URL(path + '?lang=' + locale, location.href);
+    history.pushState(null, '', url);
+    return applyOfficeRoute(url);
+  });
+}
+window.addEventListener('popstate', () => applyOfficeRoute(new URL(location.href)));
 async function loadLocalSettings(){
   let config;
   localKeyCheck='checking';renderKeyConfigBadge();
@@ -1059,12 +1088,15 @@ $('adminQuery').addEventListener('submit',event=>{event.preventDefault();clearTi
 for(const [id,mode] of [['comfortThermal','thermal'],['comfortSurvey','survey']])$(id).addEventListener('click',()=>{comfortMode=mode;adminPage=0;renderAdmin();});
 for(const id of ['historyStart','historyEnd','minBookings','minUnused','minPercent'])$(id).addEventListener('change',()=>{clearTimeout(historyFilterTimer);perform(runHistory);});
 $('spaceSearch').addEventListener('input',()=>{clearTimeout(historyFilterTimer);historyFilterTimer=setTimeout(()=>perform(runHistory),250);});
+async function refreshAdminSection() {
+  if (adminTab === 'improvements' && improvementScope() !== 'allocation') await equipmentUI.load();
+  else if (adminTab === 'live') await loadReservations();
+  else await runHistory();
+}
 document.querySelectorAll('[data-admin]').forEach(button=>button.addEventListener('click',()=>{
   equipmentUI?.leave();
   historyGeneration++;adminTab=button.dataset.admin;adminPage=0;adminData=null;adminTrace=null;renderAdmin();
-  if(adminTab==='improvements'&&improvementScope()!=='allocation')perform(()=>equipmentUI.load());
-  else if(!['live','ai','improvements'].includes(adminTab))perform(runHistory);
-  else if(adminTab==='live'&&workspace?.admin_crud)perform(loadReservations);
+  if (adminTab !== 'ai' && (adminTab !== 'improvements' || improvementScope() !== 'allocation')) perform(refreshAdminSection);
 }));
 $('adminRefresh').addEventListener('click',()=>perform(async()=>{if(equipmentUI?.isActive()){await equipmentUI.load();return;}if(adminTab==='live'){await sync();if(workspace?.admin_crud)await loadReservations();}else if(adminTab!=='ai')await runHistory();}));
 $('adminPrevious').addEventListener('click',()=>{if(equipmentUI?.isActive()){equipmentUI.next(-1);return;}adminPage--;renderAdmin();});
