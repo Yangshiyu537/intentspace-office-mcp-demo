@@ -262,3 +262,39 @@ dialog.calendarDialog{width:min(1100px,calc(100vw - 32px));max-width:1100px;heig
 .insightButtons{justify-content:flex-start}.insightCard .row button{font-size:12px;padding:6px 10px}
 .insightLimits{max-width:90ch}.insightRuns{font-size:12px;color:var(--muted)}.insightRuns summary{cursor:pointer}.insightRuns ol{margin:6px 0 0;padding-left:20px;line-height:1.8}
 @media(max-width:600px){.insightCards{grid-template-columns:1fr}.insightCard{padding:10px}.insightStatus{font-size:11px}}
+/* Readability and affordance fixes (2026-11-08). */
+.small,small{font-size:12px}
+textarea::placeholder,input::placeholder{color:#a8936d;font-style:italic}
+.calendarEntry{display:flex;align-items:center;gap:10px;text-align:left;font-weight:700;background:#3f5a3a;border:2px solid #b8dc76;box-shadow:0 2px 0 #1d301c}
+.calendarEntry:hover:not(:disabled){background:#4e6d46}
+.calendarEntry::before{content:'';flex:none;width:16px;height:14px;border:2px solid #f6e7bd;border-top-width:5px;border-radius:2px;background:linear-gradient(#f6e7bd,#f6e7bd) 3px 3px/3px 3px no-repeat,linear-gradient(#f6e7bd,#f6e7bd) 8px 3px/3px 3px no-repeat}
+.calendarEntry::after{content:'›';margin-left:auto;font-size:18px;line-height:1;color:#d0efa0}
+.empty .emptyHint{margin-top:8px;color:#d0efa0}
+/* Insights stage: floor map with badges + pixel assistant. */
+.insightStage{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,1fr);gap:14px;flex:1;min-height:0}
+.insightMapPane{position:relative;min-height:260px;border:2px solid #a77848;border-radius:6px;background:#203a32;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px}
+.insightMapSvg{display:block;width:100%;height:100%;max-height:100%}
+.insightSide{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto;padding-right:4px}
+.insightSide .insightCards{grid-template-columns:1fr}
+.insightMapSvg .layoutRoom.insightFlag-new>path,.insightMapSvg .layoutRoom.insightFlag-recurred>path{stroke:#f4c869;stroke-width:12;fill:#efe1af}
+.insightMapSvg .layoutRoom.insightFlag-persisting>path{stroke:#d8bb7d;stroke-width:10;fill:#e9dcb8}
+.insightMapSvg .layoutRoom.insightFlag-resolved>path{stroke:#b8dc76;stroke-width:10;fill:#d2e3be}
+.insightMapSvg .layoutRoom{cursor:default}
+.insightPinBox{fill:#284c4f;stroke:#f6e7bd;stroke-width:2}.insightPinText{fill:#f6e7bd}
+.insightPin.new .insightPinBox,.insightPin.recurred .insightPinBox{fill:#f4c869;stroke:#3a2a17}.insightPin.new .insightPinText,.insightPin.recurred .insightPinText{fill:#3a2a17}
+.insightPin.resolved .insightPinBox{fill:#b8dc76;stroke:#273e24}.insightPin.resolved .insightPinText{fill:#273e24}
+.insightPin.persisting .insightPinBox{fill:#d8bb7d;stroke:#35271f}.insightPin.persisting .insightPinText{fill:#35271f}
+@media(prefers-reduced-motion:no-preference){.insightPin.new,.insightPin.recurred{animation:insightBob 1.6s steps(2,end) infinite}}
+@keyframes insightBob{50%{transform:translateY(-6px)}}
+.insightSpeech{position:absolute;left:10px;top:10px;right:10px;z-index:2;display:flex;align-items:flex-start;gap:8px;pointer-events:none}
+.insightAssistant{flex:none;width:48px;height:48px;image-rendering:pixelated;filter:drop-shadow(2px 2px 0 #14292a)}
+.insightBubble{position:relative;max-width:min(460px,100%);background:#fff4d6;color:#2d2219;border:2px solid #35271f;border-radius:4px;padding:8px 11px;box-shadow:3px 3px 0 #14292a}
+.insightBubble p{font-size:13px;line-height:1.6;color:#2d2219}.insightBubble .small{color:#6b5a45;font-size:11px}
+.insightBubble::before{content:'';position:absolute;left:-10px;top:14px;border:8px solid transparent;border-right-color:#35271f;border-left:0}
+@media(max-width:900px){.insightStage{grid-template-columns:1fr}.insightMapPane{min-height:300px}}
+@media(max-width:600px){.insightMapPane{min-height:260px}.insightAssistant{width:36px;height:36px}.insightBubble p{font-size:12px}}
+.insightSpeech{position:static;pointer-events:auto;margin:0}
+.insightBubble{max-width:none;flex:1}
+/* One more admin menu item: keep the menu inside short screens. */
+@media(min-width:601px) and (max-height:780px){.adminNav{gap:5px;padding:12px}.adminNav h1{font-size:18px;margin-bottom:4px}.adminNav button{padding:7px 10px;font-size:12px}.adminNav p{font-size:10px;line-height:1.5;padding-top:6px}}
+@media(min-width:601px) and (max-height:700px){.adminNav p{display:none}}

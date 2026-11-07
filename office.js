@@ -74,7 +74,7 @@ function renderCalendarInput(){
     $('calendarImportStatus').textContent=t(!calendarExport?'calendarExportFirst':stale?'calendarExportStale':!calendarExport.events.length?'calendarExportEmpty':'calendarExportReady')
       +(calendarExport&&!stale?' '+calendarExport.events.filter(e=>e.status==='active').length+' '+t('calendarExportItems'):'');
   }
-  if(!selected)$('intent').placeholder=t('planPlaceholder');
+  if(!selected)$('intent').placeholder=t('examplePrefix')+t('planPlaceholder');
   if(selected&&calendarReviewReport&&!stale)$('calendarImportStatus').textContent=t('calendarReviewCounts').replace('{new}',calendarReviewReport.newCount).replace('{reused}',calendarReviewReport.progress.total-calendarReviewReport.newCount);
   $('calendarTrace').hidden=!calendarReviewReport||!selected||stale;
   $('parseButton').disabled=working||(selected&&(!calendarExport||stale||!calendarExport.events.length));
@@ -325,7 +325,7 @@ function renderAgenda() {
   $('agendaPrevious').disabled=!items.length||agendaIndex===0||working;$('agendaNext').disabled=agendaIndex>=items.length-1||working;
   const item=items[agendaIndex];
   if(agendaTab!=='proposals')selectedBookingId=item?.id??null;
-  if(!item){$('agendaContent').innerHTML='<div class="empty"><span class="emptyGlyph" aria-hidden="true">▦</span><p>'+t(agendaTab==='proposals'?'noPlan':agendaTab==='history'?'emptyHistory':'emptyCurrent')+'</p></div>';return;}
+  if(!item){$('agendaContent').innerHTML='<div class="empty"><span class="emptyGlyph" aria-hidden="true">▦</span><p>'+t(agendaTab==='proposals'?'noPlan':agendaTab==='history'?'emptyHistory':'emptyCurrent')+'</p>'+(agendaTab==='proposals'?'<p class="small emptyHint">'+t('noPlanHint')+'</p>':'')+'</div>';return;}
   if(agendaTab!=='proposals'){
     const next=latestRecord(item),replaced=next?.id!==item.id||Boolean(item.replacement_id||item.replaced_by);
     const active=agendaTab==='bookings';

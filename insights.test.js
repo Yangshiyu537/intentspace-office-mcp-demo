@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { officeRooms, createOfficeService, handleStoredOfficeRequest } from './office-service.js';
 import { historicalDemoReservations, nextWeekDemoReservations, createHistoricalDemoState, HISTORICAL_DEMO_ANCHOR } from './meeting-state.js';
 import { runInsightDetection, needsDetection, decideInsight, insightsView, detectionWindow, triggerForPath } from './office-insights.js';
-import { renderInsightBoard, insightMetrics } from './insights-ui.js';
+import { renderInsightBoard, insightMetrics, renderInsightMap, assistantMessage } from './insights-ui.js';
 import { translator, messages } from './ui-i18n.js';
 import { errorResponse } from './http-utils.js';
 
@@ -129,4 +129,22 @@ test('気づき画面：日英文言が揃い、AIキーなしで新規カード
   assert.deepEqual(insightMetrics(insightsView(state), t).map(([, v]) => v), [2, 2, 0, 0]);
   const html = renderInsightBoard({ ...insightsView(state), batch_imported: true }, t, 'ja');
   assert.doesNotMatch(html, /data-insight-import/);
+});
+
+test('気づき地図：部屋ごとのバッジ、IDとフォーカスの重複なし、案内文は検知結果だけを述べる', () => {
+  const first = detect(null, week1), id = Object.values(first.findings).find(f => f.name === 'B').finding_id;
+  const later = detect(decideInsight(first, { finding_id: id, decision: 'adopted', at: now().toISOString() }), [...week1, ...week2], { trigger: 'new_data', revision: 2 });
+  const view = insightsView(later);
+  for (const locale of ['ja', 'en']) {
+    const t = translator(locale), svg = renderInsightMap(view, t, locale);
+    assert.equal((svg.match(/class="insightPin /g) ?? []).length, 3);
+    for (const kind of ['new', 'persisting', 'resolved']) assert.match(svg, new RegExp('insightFlag-' + kind));
+    assert.doesNotMatch(svg, / id="meeting-seat|tabindex=|role="button"|data-room=|data-seat-id=/);
+    assert.match(svg, /id="insight-floor"/); assert.doesNotMatch(svg, /url\(#floor\)/);
+    const say = assistantMessage(view, t, locale);
+    assert.match(say, new RegExp(t('insightSay_new_data').slice(0, 6)));
+    assert.match(say, /G/); assert.match(say, /B/); assert.match(say, /X/);
+    if (locale === 'ja') assert.doesNotMatch(say, /。 /);
+  }
+  assert.equal(assistantMessage(null, translator('ja')), '');
 });

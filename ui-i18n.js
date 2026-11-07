@@ -597,6 +597,19 @@ messages.en.privacy+=' Equipment feedback analysis separately sends supplied com
 
 // Automatic change detection (no API key). Templates use {name} placeholders.
 const insightMessages={
+  examplePrefix:['例：','e.g. '],
+  insightMapLabel:['会議室フロアと自動検知の結果','Meeting-room floor with detected insights'],
+  insightMapBadge_new:['！新規','! New'],insightMapBadge_recurred:['！再発','! Again'],insightMapBadge_persisting:['要確認','Review'],insightMapBadge_resolved:['✓ 解消','✓ Resolved'],
+  insightSay_initial:['最初のチェックをしました。','I ran the first check.'],insightSay_daily:['日付が変わったので、もう一度チェックしました。','A new day started, so I checked again.'],
+  insightSay_data_changed:['データが変わったので、チェックし直しました。','The data changed, so I checked again.'],insightSay_new_data:['新しいデータが届いたので、チェックし直しました。','New data arrived, so I checked again.'],
+  insightSay_admin_edit:['管理者の編集を受けて、チェックし直しました。','An administrator edit came in, so I checked again.'],insightSay_booking:['新しい予約を受けて、チェックし直しました。','A new booking came in, so I checked again.'],
+  insightSay_meeting_state:['会議の開始・終了を受けて、チェックし直しました。','A meeting started or ended, so I checked again.'],
+  insightSay_new:['会議室{rooms}で、少人数利用が多い傾向を新しく見つけました。','Room {rooms} newly shows many small-group bookings.'],
+  insightSay_improved:['会議室{rooms}は、採用した提案のあと改善しています。','Room {rooms} improved after the adopted suggestion.'],
+  insightSay_resolved:['会議室{rooms}は確認条件を下回りました。','Room {rooms} is now below the review rule.'],
+  insightSay_ongoing:['会議室{rooms}は引き続き確認が必要です。','Room {rooms} still needs review.'],
+  insightSay_none:['いま確認が必要な会議室はありません。','No room needs review right now.'],
+  insightSayNote:['自動検知ルールの結果です（AIは使っていません）','Result of the automatic review rule (no AI used)'],noPlanHint:['「入力例を使う」を押すと、すぐに試せます。','Press “Use an example” to try it right away.'],
   insights:['気づき（自動検知）','Insights (auto-detected)'],
   insightsDescription:['データが変わるたび・日付が変わるたびに、確認ルールが自動で実行されます。AIキーもチャット入力も不要です。管理者は提案を採用・見送りし、その後の変化を確認できます。','A review rule runs automatically whenever data changes or a new day starts. No API key or chat input is needed. Adopt or decline each suggestion and follow what changes afterwards.'],
   insightLastRun:['最終チェック','Last check'],insightTriggerLabel:['きっかけ','Trigger'],insightPeriod:['対象期間','Period'],insightRecords:['分析した予約','Bookings analysed'],
