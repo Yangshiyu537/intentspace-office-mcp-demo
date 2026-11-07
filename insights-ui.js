@@ -5,36 +5,46 @@ import { renderOfficeLayout, layoutRooms } from './office-layout.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fill = (text, values) => String(text).replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '');
 
-// A read-only copy of the meeting-room floor with one badge per detected room. IDs, focus and
-// room click targets are removed so it cannot collide with the employee map on the same page.
-export function renderInsightMap(view, t, locale = 'ja') {
+// A read-only copy of the meeting-room floor with badges. IDs, focus and room click targets
+// are removed so it cannot collide with the employee map on the same page.
+// pins: [{room_id, label, kind}]  classes: {room_id: css class}  label: aria label for the whole map.
+export function renderFloorWithPins({ pins = [], classes = {}, locale = 'ja', label = '', svgClass = 'insightMapSvg' } = {}) {
   const rendered = renderOfficeLayout('meeting', locale, Object.fromEntries(layoutRooms.map(room => [room.id, 'available'])));
   let svg = rendered.svg
     .replace(/ id="meeting-seat-\d+"/g, '').replace(/ tabindex="[^"]*"/g, '').replace(/ role="[^"]*"/g, '').replace(/ data-seat-id="/g, ' data-insight-seat="')
     .replace(/id="(floor|room|unknown)"/g, 'id="insight-$1"').replace(/url\(#(floor|room|unknown)\)/g, 'url(#insight-$1)')
     .replace(/data-room="/g, 'data-insight-room="');
-  const latest = new Map();
-  for (const f of view?.findings ?? []) latest.set(f.room_id, f);
+  const byRoom = new Map(pins.map(pin => [pin.room_id, pin]));
   const marks = [];
   const markers = [...svg.matchAll(/data-insight-room="([^"]+)"[\s\S]*?<g class="roomMarker"><rect x="([\d.-]+)" y="([\d.-]+)"/g)]
     .map(m => ({ id: m[1], cx: Number(m[2]) + 33, cy: Number(m[3]) - 4 + 31 }));
   const hits = (box, skip) => markers.some(m => m.id !== skip && box.x1 < m.cx + 40 && m.cx - 40 < box.x2 && box.y1 < m.cy + 33 && m.cy - 35 < box.y2);
   for (const marker of markers) {
-    const finding = latest.get(marker.id);
-    if (!finding) continue;
-    const kind = finding.status === 'resolved' ? 'resolved' : finding.change;
-    const label = t('insightMapBadge_' + kind), width = Math.max(108, label.length * (locale === 'en' ? 15 : 26) + 30);
+    if (classes[marker.id]) svg = svg.replace(`class="layoutRoom available" data-insight-room="${marker.id}"`, `class="layoutRoom available ${esc(classes[marker.id])}" data-insight-room="${marker.id}"`);
+    const pin = byRoom.get(marker.id);
+    if (!pin) continue;
+    const text = String(pin.label), width = Math.max(108, [...text].reduce((n, c) => n + (/[\u0000-ÿ]/.test(c) ? 15 : 26), 0) + 30);
     const right = { x: marker.cx + 40 + width / 2 + 6, y: marker.cy - 6 };
     const rightBox = { x1: right.x - width / 2, x2: right.x + width / 2, y1: right.y - 22, y2: right.y + 24 };
-    const { x, y } = hits(rightBox, marker.id) ? { x: marker.cx, y: marker.cy - 62 } : right;
-    const tail = hits(rightBox, marker.id) ? `M ${x - 9} ${y + 24} L ${x} ${y + 36} L ${x + 9} ${y + 24} Z` : `M ${x - width / 2} ${y - 8} L ${x - width / 2 - 12} ${y + 1} L ${x - width / 2} ${y + 10} Z`;
-    marks.push(`<g class="insightPin ${esc(kind)}" aria-hidden="true"><rect x="${x - width / 2 + 3}" y="${y - 22 + 4}" width="${width}" height="46" fill="#14292a"/>`
+    const above = hits(rightBox, marker.id);
+    const { x, y } = above ? { x: marker.cx, y: marker.cy - 62 } : right;
+    const tail = above ? `M ${x - 9} ${y + 24} L ${x} ${y + 36} L ${x + 9} ${y + 24} Z` : `M ${x - width / 2} ${y - 8} L ${x - width / 2 - 12} ${y + 1} L ${x - width / 2} ${y + 10} Z`;
+    marks.push(`<g class="insightPin ${esc(pin.kind)}" aria-hidden="true"><rect x="${x - width / 2 + 3}" y="${y - 22 + 4}" width="${width}" height="46" fill="#14292a"/>`
       + `<rect x="${x - width / 2}" y="${y - 22}" width="${width}" height="46" class="insightPinBox"/>`
       + `<path d="${tail}" class="insightPinBox"/>`
-      + `<text x="${x}" y="${y + 9}" text-anchor="middle" font-size="26" font-weight="700" font-family="system-ui,sans-serif" class="insightPinText">${esc(label)}</text></g>`);
-    svg = svg.replace(`class="layoutRoom available" data-insight-room="${marker.id}"`, `class="layoutRoom available insightFlag-${esc(kind)}" data-insight-room="${marker.id}"`);
+      + `<text x="${x}" y="${y + 9}" text-anchor="middle" font-size="26" font-weight="700" font-family="system-ui,sans-serif" class="insightPinText">${esc(text)}</text></g>`);
   }
-  return `<svg class="insightMapSvg" viewBox="${rendered.box.join(' ')}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(t('insightMapLabel'))}">${svg}${marks.join('')}</svg>`;
+  return `<svg class="${esc(svgClass)}" viewBox="${rendered.box.join(' ')}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(label)}">${svg}${marks.join('')}</svg>`;
+}
+
+export function renderInsightMap(view, t, locale = 'ja') {
+  const pins = [], classes = {};
+  for (const f of view?.findings ?? []) {
+    const kind = f.status === 'resolved' ? 'resolved' : f.change;
+    pins.push({ room_id: f.room_id, kind, label: t('insightMapBadge_' + kind) });
+    classes[f.room_id] = 'insightFlag-' + kind;
+  }
+  return renderFloorWithPins({ pins, classes, locale, label: t('insightMapLabel') });
 }
 
 // Original pixel-art assistant (12x12 grid). It reports rule results; it is not an AI model.

@@ -13,6 +13,7 @@ import {errorResponse,HttpError} from './http-utils.js';
 import {createCalendarUI,calendarMonthDates} from './calendar-ui.js';
 import {createEquipmentFeedbackUI,renderSuggestionBoard,suggestionText} from './equipment-feedback-ui.js';
 import {createInsightsUI} from './insights-ui.js';
+import {createReplayUI} from './replay-ui.js';
 import {createEquipmentFeedback,feedbackSelection,runEquipmentFeedbackAgent} from './equipment-feedback.js';
 import {withMcpClient} from './mcp-client.js';
 import {ApiSession,ReviewComparison} from './session.js';
@@ -815,11 +816,11 @@ async function employeeUi({dayParser,answerer,calendarAgent,calendarFault,equipm
     catch(error){options.signal?.throwIfAborted();return errorResponse(error);}
   }
   const source=readFileSync(new URL('./office.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
-  const run=new (Object.getPrototypeOf(async function(){}).constructor)('ApiSession','ReviewComparison','translator','errorKey','applyLanguage','document','window','fetch','location','history','innerWidth','innerHeight','matchMedia','setInterval','clearInterval','layoutAreas','layoutPosition','renderOfficeLayout','createCalendarUI','createEquipmentFeedbackUI','renderSuggestionBoard','suggestionText','createInsightsUI',source+'\nreturn {sync,showBooking,isWorking:()=>working};');
+  const run=new (Object.getPrototypeOf(async function(){}).constructor)('ApiSession','ReviewComparison','translator','errorKey','applyLanguage','document','window','fetch','location','history','innerWidth','innerHeight','matchMedia','setInterval','clearInterval','layoutAreas','layoutPosition','renderOfficeLayout','createCalendarUI','createEquipmentFeedbackUI','renderSuggestionBoard','suggestionText','createInsightsUI','createReplayUI',source+'\nreturn {sync,showBooking,isWorking:()=>working};');
   const location = new URL(role==='admin'?'/admin?lang=en':'/office.html?lang=en','http://demo.test');
   const history = { pushState(_state,_title,url){location.href=url;}, replaceState(_state,_title,url){location.href=url;} };
   const controller=await run(ApiSession,ReviewComparison,translator,errorKey,value=>{document.documentElement.lang=value;},document,uiWindow,request,
-    location,history,1280,720,()=>({matches:true}),()=>1,()=>{},layoutAreas,layoutPosition,renderOfficeLayout,createCalendarUI,createEquipmentFeedbackUI,renderSuggestionBoard,suggestionText,createInsightsUI);
+    location,history,1280,720,()=>({matches:true}),()=>1,()=>{},layoutAreas,layoutPosition,renderOfficeLayout,createCalendarUI,createEquipmentFeedbackUI,renderSuggestionBoard,suggestionText,createInsightsUI,createReplayUI);
   async function fire(element,type,event={}){
     for(const listener of element.events[type]??[])await listener({preventDefault(){},...event});
     for(let i=0;controller.isWorking();i++){if(i>1000)throw new Error('UI remained busy');await new Promise(resolve=>setImmediate(resolve));}

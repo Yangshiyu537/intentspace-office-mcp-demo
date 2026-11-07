@@ -12,6 +12,7 @@ import { createHistoricalDemoState } from './meeting-state.js';
 import { parse } from 'csv-parse/sync';
 import { summarizeEnterpriseComfort } from './seat-comfort.js';
 import { createEquipmentFeedback } from './equipment-feedback.js';
+import { createRealReplay } from './real-replay.js';
 import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 
@@ -35,7 +36,7 @@ const tools = await client.listTools();
 const status = await client.callTool({ name: 'get_data_status', arguments: {} });
 const dataMode = status.structuredContent.meta.mode;
 const files = new Map([['/', 'index.html'], ['/app.js','app.js'], ['/styles.css','styles.css'], ['/ai.js','ai.js'], ['/session.js','session.js']]);
-for(const name of ['office.html','office.js','office.css','ui-i18n.js','office-layout.js','calendar-ui.js','equipment-feedback-ui.js','insights-ui.js'])files.set('/'+name,name);
+for(const name of ['office.html','office.js','office.css','ui-i18n.js','office-layout.js','calendar-ui.js','equipment-feedback-ui.js','insights-ui.js','replay-ui.js'])files.set('/'+name,name);
 files.set('/admin','office.html');
 files.set('/history','index.html');
 // Read-only local summaries. Never copy private CSV into public assets or GPT context.
@@ -54,10 +55,16 @@ try{
   const [satisfactionRows,spaceRows]=bytes.map(text=>parse(text,{columns:true,bom:true,skip_empty_lines:true}));
   equipmentData=createEquipmentFeedback({satisfactionRows,spaceRows,sources:Object.fromEntries(names.map((name,index)=>[name,{sha256:createHash('sha256').update(bytes[index]).digest('hex')}]))});
 }catch(error){equipmentData={source:error.code==='ENOENT'?'unavailable':'error'};}
+// Real-day replay: local only. OFFICE_REPLAY_CSV may point to a reduced copy (room/time/people/status).
+let replayData=null;
+try{
+  const file=process.env.OFFICE_REPLAY_CSV??comfortDirectory+'/reservations.csv';
+  replayData=createRealReplay(parse(await readFile(file,'utf8'),{columns:true,bom:true,skip_empty_lines:true}));
+}catch(error){if(error.code!=='ENOENT')console.error('Replay data could not be read:',error.message);}
 // Use the same fixed historical batch as the public Worker; never roll dates forward.
 // A supplied snapshot preserves the user's records when replacing a local preview.
 const workspace=createHistoricalDemoState({rooms:officeRooms,previousSnapshot:previous});
-const handleOfficeRequest=createOfficeService({comfortSummary,equipmentData,workspace});
+const handleOfficeRequest=createOfficeService({comfortSummary,equipmentData,replayData,workspace});
 const server = createServer(async (req,res) => {
   const controller = new AbortController();
   req.on('aborted', () => controller.abort());

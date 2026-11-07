@@ -104,7 +104,7 @@ export async function recommendOfficeRooms(request,bookings,today,{includeSeeded
 }
 
 // Local-only, bounded, page-scoped simulation sessions. No company data or disk writes.
-export function createOfficeService({now=()=>new Date(),gptParser=parseOfficeIntentWithGpt,dayParser=parseDayPlanWithGpt,answerer=answerQuestion,improvementAgent=runOfficeImprovementAgent,calendarAgent=runCalendarAgent,equipmentData=null,equipmentAgent=runEquipmentFeedbackAgent,workspace:providedWorkspace,comfortSummary=null,initialReservations=[],includeLegacyPresets=false}={}) {
+export function createOfficeService({now=()=>new Date(),gptParser=parseOfficeIntentWithGpt,dayParser=parseDayPlanWithGpt,answerer=answerQuestion,improvementAgent=runOfficeImprovementAgent,calendarAgent=runCalendarAgent,equipmentData=null,equipmentAgent=runEquipmentFeedbackAgent,workspace:providedWorkspace,comfortSummary=null,replayData=null,initialReservations=[],includeLegacyPresets=false}={}) {
   const sessions=new Map();
   const workspace=providedWorkspace??createMeetingState({rooms:officeRooms,now,initialReservations,includeLegacyPresets});
   const recommendCalendar=(need,bookings,today)=>recommendOfficeRooms(need,bookings,today,{includeSeeded:false});
@@ -128,6 +128,20 @@ export function createOfficeService({now=()=>new Date(),gptParser=parseOfficeInt
     assertSameOrigin(request);purge();
     const path=new URL(request.url).pathname;
     const today=workspace.referenceDate();
+    // Local-only replay of the supplied enterprise sample. The public Worker never has replayData.
+    if(path==='/api/office/replay'){
+      if(request.method!=='GET')throw new HttpError(405,'method');
+      return json(replayData?replayData.summary():{source:'unavailable',local_only:true});
+    }
+    if(path==='/api/office/replay/day'){
+      if(request.method!=='GET')throw new HttpError(405,'method');
+      if(!replayData)return json({source:'unavailable',local_only:true});
+      const params=new URL(request.url).searchParams;
+      if([...params.keys()].some(key=>key!=='date')||!dateSchema.safeParse(params.get('date')).success)throw new HttpError(400,'replay_date');
+      const day=replayData.day(params.get('date'));
+      if(!day)throw new HttpError(404,'replay_date');
+      return json({source:'enterprise_sample',local_only:true,...day});
+    }
     if(path==='/api/office/insights'&&workspace.insights){
       if(request.method!=='GET')throw new HttpError(405,'method');
       workspace.refreshInsights();
@@ -438,7 +452,7 @@ export async function handleStoredOfficeRequest(request,storage,{now=()=>new Dat
   assertSameOrigin(request);
   const path=new URL(request.url).pathname;
   const reads=['/api/office/workspace','/api/office/admin/reservations','/api/office/comfort',
-    '/api/office/equipment/status','/api/office/equipment/comments','/api/office/insights'];
+    '/api/office/equipment/status','/api/office/equipment/comments','/api/office/insights','/api/office/replay','/api/office/replay/day'];
   const readonlyPosts=['/api/office/data/call','/api/office/data/chat','/api/office/improvements'];
   const writes=['/api/office/workspace/reset','/api/office/day-plan','/api/office/confirm','/api/office/attendance',
     '/api/office/transition','/api/office/replan','/api/office/rebook',...['create','update','delete','restore','finish','cancel','purge','clear-preview','clear','purge-preview','purge-deleted'].map(a=>'/api/office/admin/'+a)];
