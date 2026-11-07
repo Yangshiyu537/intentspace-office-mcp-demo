@@ -1,3 +1,4 @@
+import { triggerForPath, INSIGHT_DECISIONS } from './office-insights.js';
 import { layoutRooms, layoutSeats, layoutPosition } from './office-layout.js';
 import { simulatedComfort, missingFeatures, compareComfort, comfortOrder } from './seat-comfort.js';
 import { randomUUID } from 'node:crypto';
@@ -114,10 +115,36 @@ export function createOfficeService({now=()=>new Date(),gptParser=parseOfficeInt
   };
   const ttl=30*60*1000;
   function purge(){const time=now().getTime();for(const [id,s] of sessions)if(time-s.touched>=ttl)sessions.delete(id);}
+  // Automatic detection: whenever a request changed workspace data, re-run the review rule.
+  // This needs no API key and no chat input; the Agent stays an optional deeper investigation.
   return async function handleOfficeRequest(request){
+    const before=workspace.currentRevision?.();
+    const response=await handle(request);
+    if(response.ok&&workspace.refreshInsights&&before!==undefined&&workspace.currentRevision()!==before)
+      workspace.refreshInsights({trigger:triggerForPath(new URL(request.url).pathname)});
+    return response;
+  };
+  async function handle(request){
     assertSameOrigin(request);purge();
     const path=new URL(request.url).pathname;
     const today=workspace.referenceDate();
+    if(path==='/api/office/insights'&&workspace.insights){
+      if(request.method!=='GET')throw new HttpError(405,'method');
+      workspace.refreshInsights();
+      return json(workspace.insights());
+    }
+    if(path==='/api/office/insights/decision'&&workspace.insights){
+      if(request.method!=='POST')throw new HttpError(405,'method');
+      const input=z.object({finding_id:z.string().min(1).max(200),decision:z.enum(INSIGHT_DECISIONS),note:z.string().max(200).optional()}).strict().safeParse(await readJson(request,2000));
+      if(!input.success)throw new HttpError(400,'insight_decision');
+      return json(workspace.decideInsight(input.data));
+    }
+    if(path==='/api/office/insights/import-batch'&&workspace.insights){
+      if(request.method!=='POST')throw new HttpError(405,'method');
+      workspace.importDemoBatch();
+      workspace.refreshInsights({trigger:'new_data'});
+      return json(workspace.insights());
+    }
     if(path==='/api/office/config'&&request.method==='GET')return json({local_key_available:false});
     if(path==='/api/office/equipment/status'){
       if(request.method!=='GET')throw new HttpError(405,'method');
@@ -411,11 +438,12 @@ export async function handleStoredOfficeRequest(request,storage,{now=()=>new Dat
   assertSameOrigin(request);
   const path=new URL(request.url).pathname;
   const reads=['/api/office/workspace','/api/office/admin/reservations','/api/office/comfort',
-    '/api/office/equipment/status','/api/office/equipment/comments'];
+    '/api/office/equipment/status','/api/office/equipment/comments','/api/office/insights'];
   const readonlyPosts=['/api/office/data/call','/api/office/data/chat','/api/office/improvements'];
   const writes=['/api/office/workspace/reset','/api/office/day-plan','/api/office/confirm','/api/office/attendance',
     '/api/office/transition','/api/office/replan','/api/office/rebook',...['create','update','delete','restore','finish','cancel','purge','clear-preview','clear','purge-preview','purge-deleted'].map(a=>'/api/office/admin/'+a)];
-  writes.push('/api/office/calendar/analyze','/api/office/calendar/export','/api/office/calendar/review');
+  writes.push('/api/office/calendar/analyze','/api/office/calendar/export','/api/office/calendar/review',
+    '/api/office/insights/decision','/api/office/insights/import-batch');
   if(path==='/api/office/calendar'){if(request.method==='GET')reads.push(path);else writes.push(path);}
   if(!reads.includes(path)&&!writes.includes(path)&&!readonlyPosts.includes(path))throw new HttpError(404,'invalid_action');
   if(request.method!==(reads.includes(path)?'GET':'POST'))throw new HttpError(405,'invalid_action');
@@ -427,7 +455,8 @@ export async function handleStoredOfficeRequest(request,storage,{now=()=>new Dat
   const service=createOfficeService({...options,now,workspace});
   const response=await service(request);
   if(response.ok&&path==='/api/office/improvements'&&(storage.load()?.version??0)!==(saved?.version??0))throw new HttpError(409,'state_changed');
-  if(response.ok&&(!saved||initialized||writes.includes(path))){
+  // Detection results are saved too, also when only a read (a new day) triggered a run.
+  if(response.ok&&(!saved||initialized||writes.includes(path)||workspace.insightsDirty())){
     if(!storage.commit(saved?.version??0,workspace.exportState()))throw new HttpError(409,'state_changed');
   }
   if(response.ok){

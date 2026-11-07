@@ -595,6 +595,43 @@ for(const [key,[ja,en]] of Object.entries(equipmentMessages)){messages.ja[key]=j
 messages.ja.privacy+=' 設備フィードバックの分析だけは、別途の送信確認後に企業提供コメント・日付・空間名・評価を送信します。';
 messages.en.privacy+=' Equipment feedback analysis separately sends supplied company comments, dates, space names and scores only after transmission confirmation.';
 
+// Automatic change detection (no API key). Templates use {name} placeholders.
+const insightMessages={
+  insights:['気づき（自動検知）','Insights (auto-detected)'],
+  insightsDescription:['データが変わるたび・日付が変わるたびに、確認ルールが自動で実行されます。AIキーもチャット入力も不要です。管理者は提案を採用・見送りし、その後の変化を確認できます。','A review rule runs automatically whenever data changes or a new day starts. No API key or chat input is needed. Adopt or decline each suggestion and follow what changes afterwards.'],
+  insightLastRun:['最終チェック','Last check'],insightTriggerLabel:['きっかけ','Trigger'],insightPeriod:['対象期間','Period'],insightRecords:['分析した予約','Bookings analysed'],
+  insightTrigger_initial:['初回チェック','First check'],insightTrigger_daily:['日付の切り替わり','New day'],insightTrigger_data_changed:['データの変更','Data changed'],
+  insightTrigger_new_data:['新しいデータの取り込み','New data imported'],insightTrigger_admin_edit:['管理者による編集','Administrator edit'],
+  insightTrigger_booking:['社員の予約','Employee booking'],insightTrigger_meeting_state:['会議の開始・終了','Meeting started or ended'],
+  insightImport:['新しい週のデータを取り込む（模擬）','Import next week of data (simulated)'],
+  insightImported:['模擬データの2週目は取り込み済みです。初期状態に戻すと再度試せます。','The second simulated week is already imported. Reset the workspace to try again.'],
+  insightImportHint:['「新しいデータが届いた」状況を再現します。取り込むと、確認ルールが自動で再実行されます。','Simulates new data arriving. The review rule re-runs automatically.'],
+  insightBadge_new:['新規','New'],insightBadge_persisting:['継続','Ongoing'],insightBadge_resolved:['解消','Resolved'],insightBadge_recurred:['再発','Recurred'],
+  insightRoom:['会議室 {name}（定員{capacity}人）','Room {name} (capacity {capacity})'],
+  insightOpenFact:['直近の予約{total}件のうち{count}件（{percent}%）が、予定{people}人の少人数利用でした。同じ時間帯に条件に合う小会議室が空いていたのは{alternatives}件です。','{count} of {total} recent bookings ({percent}%) planned only {people} people. A compatible smaller room was free at the same time for {alternatives} of them.'],
+  insightResolvedFact:['少人数利用は{total}件中{count}件（{percent}%）になり、確認ルールの条件を下回りました。','Small-party use is now {count} of {total} ({percent}%), below the review rule.'],
+  insightTrend:['推移','Trend'],insightProposal:['提案','Suggestion'],
+  insightAdopt:['採用する','Adopt'],insightReject:['見送る','Decline'],insightUndo:['判断を取り消す','Undo decision'],
+  insightInvestigate:['Agentで詳しく調査','Investigate with the Agent'],
+  insightAdopted:['採用済み','Adopted'],insightRejected:['見送り','Declined'],
+  insightOutcomeLabel:['採用後の変化','After adoption'],
+  insightOutcome_waiting:['次のデータを待っています（採用時 {before}%）','Waiting for the next data (at adoption {before}%)'],
+  insightOutcome_improved:['採用時 {before}% → 現在 {after}%：確認条件を下回りました','{before}% at adoption → {after}% now: below the review rule'],
+  insightOutcome_better:['採用時 {before}% → 現在 {after}%：減少','{before}% at adoption → {after}% now: decreased'],
+  insightOutcome_unchanged:['採用時 {before}% → 現在 {after}%：変化なし','{before}% at adoption → {after}% now: unchanged'],
+  insightOutcome_worse:['採用時 {before}% → 現在 {after}%：増加','{before}% at adoption → {after}% now: increased'],
+  insightRuns:['チェック履歴','Check history'],insightRunLine:['{at}　{trigger}　新規{new}・継続{persisting}・解消{resolved}','{at}  {trigger}  new {new} · ongoing {persisting} · resolved {resolved}'],
+  insightEmpty:['現在、確認が必要な会議室はありません。問題がないことの証明ではありません。','No room currently needs review. This is not proof that allocation is optimal.'],
+  insightNoData:['分析できる会議室の予約がまだありません。','There are no meeting-room bookings to analyse yet.'],
+  insightOpenCount:['要確認','Needs review'],insightNewCount:['新規','New'],insightResolvedCount:['解消','Resolved'],insightAdoptedCount:['採用済み','Adopted'],
+  insightLimits:['模擬予約の予定人数と登録定員の比較です。実際の在室人数ではありません。判断は記録のみで、予約は変更しません。','Compares planned headcount with registered capacity in simulated bookings, not actual occupancy. Decisions are recorded only; no booking is changed.'],
+  insight_batch_imported:['模擬データの2週目は取り込み済みです。','The second simulated week is already imported.'],
+  insight_unknown:['この気づきは見つかりません。画面を更新してください。','This insight was not found. Refresh the screen.'],
+  insight_not_open:['この気づきはすでに解消済みか判断済みです。','This insight is already resolved or decided.'],
+  insight_decision:['判断の内容を確認してください。','Check the decision input.']
+};
+for(const [key,[ja,en]] of Object.entries(insightMessages)){messages.ja[key]=ja;messages.en[key]=en;}
+
 export function errorKey(error){
   const aliases={
     'OpenAI API Key の形式を確認してください':'api_key_format','GPT のモデル名を確認してください':'invalid_model',

@@ -4,6 +4,7 @@ import { HttpError } from './http-utils.js';
 import { missingFeatures } from './seat-comfort.js';
 import { createSimulatedCalendar, calendarDayVersions } from './calendar-service.js';
 import { clock, minutes, overlap, sameMeeting, validateDayPlan, activityIssues, normalizeDayPlanClarifications } from './day-plan.js';
+import { runInsightDetection, needsDetection, decideInsight, insightsView } from './office-insights.js';
 
 const jstDate = now => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(now);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v);
@@ -91,6 +92,40 @@ export function historicalDemoReservations(anchorDate, rooms) {
   return result;
 }
 
+// A second fictional week, imported on demand to simulate "new data arrived". It is written so
+// that automatic detection shows one resolved, one persisting and one new review candidate.
+export function nextWeekDemoReservations(anchorDate, rooms) {
+  const dates=[];
+  for(let offset=0;dates.length<5;offset++){
+    const date=new Date(Date.parse(anchorDate+'T00:00:00Z')+offset*86400000);
+    if(![0,6].includes(date.getUTCDay()))dates.push(date.toISOString().slice(0,10));
+  }
+  const inventory=new Map(rooms.map(room=>[room.name,room]));
+  const result=[];
+  for(const [day,date] of dates.entries()){
+    const cases=[
+      ['B',540,60,7,'Capacity matched'],
+      ['B',900,45,6,'Capacity matched'],
+      ['D',600,30,3,'Small meeting'],
+      ['X',600,30,3,'Small meeting'],
+      ['G',660,30,2,'Small meeting'],
+      ['G',day<3?840:960,30,3,'Small meeting'],
+      ['C',780,60,7,'Capacity matched'],
+      ['E',840,45,5,'Capacity matched']
+    ];
+    for(const [index,[name,start,duration,people,label]] of cases.entries()){
+      const room=inventory.get(name),features=['monitor'];
+      if(!room||people>room.capacity||features.some(feature=>!room.features.includes(feature)))throw new Error('Invalid historical demo inventory');
+      const time=clock(start),end_time=clock(start+duration);
+      result.push({id:`demo-history-batch2-${date}-${index+1}`,space_id:room.id,name:room.name,date,start,end:start+duration,time,end_time,people,
+        title:'[DEMO-HISTORY] '+room.name+' / '+label,booked_by:'DEMO-HISTORY / Synthetic',assigned_to:'other',source:'demo_history',
+        fixture_anchor:anchorDate+'/batch-2',version:1,deleted:false,participants:[],status:'completed',actual_start:time,actual_end:end_time,
+        request:{date,time,duration,people,kind:room.kind,features}});
+    }
+  }
+  return result;
+}
+
 export function createHistoricalDemoState({rooms,now=()=>new Date(),previousSnapshot=null}={}) {
   const previous=previousSnapshot;
   const workspace=createMeetingState({rooms,now,...(previous?{persisted:{schema_version:1,
@@ -108,6 +143,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
   const purgedIds=new Set(persisted?.purged_ids??[]);
   const records=structuredClone(persisted?.records??initialReservations).filter(record=>!purgedIds.has(record.id)&&(includeLegacyPresets||record.source!=='preset')),events=structuredClone(persisted?.events??[]);
   let historyInitialized=persisted?.demo_history_initialized===true||records.some(record=>record.source==='demo_history');
+  let batch2Imported=persisted?.demo_batch2_imported===true,insights=structuredClone(persisted?.insights??null),insightsDirty=false;
   const plans=new Map(structuredClone(persisted?.plans??[])),seedChanges=new Map(includeLegacyPresets?structuredClone(persisted?.seed_changes??[]):[]),operations=new Map(structuredClone(persisted?.operations??[]));
   const clearPreviews=new Map(structuredClone(persisted?.clear_previews??[]));
   let revision=persisted?.revision??0;
@@ -165,6 +201,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
     records.length=0;events.length=0;plans.clear();seedChanges.clear();operations.clear();clearPreviews.clear();
     employeeCalendar.reset();
     includePresets=false;resetGeneration++;revision++;
+    batch2Imported=false;insights=null;insightsDirty=true;
     demoClock={date:jstDate(now()),time:'09:00'};
     return snapshot();
   }
@@ -537,11 +574,32 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
     if(operations.size>500)operations.delete(operations.keys().next().value);
     return structuredClone(result);
   }
+  // Automatic detection. It never changes reservations and never bumps the data revision.
+  function refreshInsights({trigger}={}){
+    const reason=needsDetection(insights,{revision,today:referenceDate()});
+    if(!reason)return false;
+    insights=runInsightDetection(insights,{rooms,reservations:reservations(),today:referenceDate(),at:now().toISOString(),
+      trigger:reason==='data_changed'&&trigger?trigger:reason,revision});
+    insightsDirty=true;return true;
+  }
+  function decideInsightFinding(input){
+    refreshInsights();
+    try{insights=decideInsight(insights,{...input,at:now().toISOString()});}
+    catch(error){throw new HttpError(error.status??400,error.message);}
+    insightsDirty=true;return {...insightsView(insights),batch_imported:batch2Imported};
+  }
+  function importDemoBatch(){
+    if(batch2Imported)throw new HttpError(409,'insight_batch_imported');
+    const existingIds=new Set(records.map(record=>record.id));
+    records.push(...nextWeekDemoReservations(HISTORICAL_DEMO_ANCHOR,rooms).filter(record=>!existingIds.has(record.id)&&!purgedIds.has(record.id)));
+    batch2Imported=true;historyInitialized=true;revision++;
+    return {imported:true,revision,simulation:true};
+  }
   function exportState(){
     // Persist only state needed for later actions; MCP traces remain in the response, not storage.
     const storedPlans=[...plans].filter(([,p])=>now().getTime()-p.created<30*60000).map(([id,p])=>[id,{...p,proposals:p.proposals.map(({trace,excluded,...proposal})=>proposal)}]);
     const state=structuredClone({schema_version:1,instance_id:instanceId,revision,reset_generation:resetGeneration,
-      include_presets:includePresets,purged_ids:[...purgedIds],demo_history_initialized:historyInitialized,employee_calendar:employeeCalendar.exportState(),clock:demoClock,records,events,plans:storedPlans,seed_changes:[...seedChanges],operations:[...operations],
+      include_presets:includePresets,purged_ids:[...purgedIds],demo_history_initialized:historyInitialized,demo_batch2_imported:batch2Imported,insights,employee_calendar:employeeCalendar.exportState(),clock:demoClock,records,events,plans:storedPlans,seed_changes:[...seedChanges],operations:[...operations],
       clear_previews:[...clearPreviews].filter(([,p])=>p.expires>now().getTime())});
     while(JSON.stringify(state).length>1500000&&state.plans.length>1)state.plans.shift();
     if(new TextEncoder().encode(JSON.stringify(state)).byteLength>1800000)throw new HttpError(422,'workspace_limit');
@@ -552,5 +610,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
     createCalendarExport:input=>employeeCalendar.createExport(input,referenceDate(),now().getTime()),
     getCalendarExport:id=>employeeCalendar.getExport(id,now().getTime()),
     saveCalendarInterpretations:items=>employeeCalendar.saveInterpretations(items),
-    previewPurge:raw=>previewClear(raw,'purge'),purgeDeleted,adminMutate,reset,initializeDemoHistory,exportState};
+    previewPurge:raw=>previewClear(raw,'purge'),purgeDeleted,adminMutate,reset,initializeDemoHistory,exportState,
+    currentRevision:()=>revision,refreshInsights,insights:()=>({...insightsView(insights),batch_imported:batch2Imported}),decideInsight:decideInsightFinding,importDemoBatch,
+    demoBatchImported:()=>batch2Imported,insightsDirty:()=>insightsDirty};
 }

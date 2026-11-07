@@ -244,3 +244,21 @@ dialog.calendarDialog{width:min(1100px,calc(100vw - 32px));max-width:1100px;heig
 
 .suggestionBasis li:only-child{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 @media(max-height:500px){.equipmentView.improvementReportReady .suggestionList{gap:5px}.equipmentView.improvementReportReady .suggestionBasis li:only-child{-webkit-line-clamp:2}}
+/* Insights: automatically detected review candidates (no API key). */
+.insightBoard{display:flex;flex-direction:column;gap:12px;min-height:0;height:100%;overflow:auto;padding-right:4px}
+.insightStatus{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--muted);background:#243f3466;border:1px solid #8cca6c55;border-radius:4px;padding:8px 12px}
+.insightStatus b{color:var(--leaf);font-weight:600;margin-right:4px}
+.insightImport{justify-content:flex-start}.insightImport button{font-size:12px}
+.insightEmpty{font-size:13px;color:var(--muted);padding:10px 0}
+.insightCards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.insightCard{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #dbc39655;border-radius:5px;background:#2f231c99;font-size:13px}
+.insightCard header{display:flex;align-items:center;gap:10px}.insightCard h3{font-size:16px;margin:0}
+.insightCard p{margin:0;line-height:1.65}.insightCard.resolved{opacity:.85;background:#2a332699}
+.insightBadge{flex:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:3px;background:#604432;color:var(--paper)}
+.insightBadge.new,.insightBadge.recurred{background:var(--warn);color:#3a2a17}.insightBadge.persisting{background:#d8bb7d;color:#35271f}.insightBadge.resolved{background:var(--leaf);color:#273e24}
+.insightProposal{background:#243f3466;padding:8px 10px;border-radius:3px}.insightProposal b,.insightOutcome b{color:var(--leaf);margin-right:6px}
+.insightOutcome{font-size:12px}.insightOutcome.improved,.insightOutcome.better{color:#d0efa0}.insightOutcome.worse{color:var(--warn)}
+.insightDecision{font-size:12px;color:var(--muted)}.insightDecision b{color:var(--paper);margin-right:6px}
+.insightButtons{justify-content:flex-start}.insightCard .row button{font-size:12px;padding:6px 10px}
+.insightLimits{max-width:90ch}.insightRuns{font-size:12px;color:var(--muted)}.insightRuns summary{cursor:pointer}.insightRuns ol{margin:6px 0 0;padding-left:20px;line-height:1.8}
+@media(max-width:600px){.insightCards{grid-template-columns:1fr}.insightCard{padding:10px}.insightStatus{font-size:11px}}
