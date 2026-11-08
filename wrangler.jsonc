@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "intentspace-yang",
+  "name": "intentspace-office-mcp-demo",
   "main": "worker.js",
   "compatibility_date": "2026-10-07",
   "compatibility_flags": ["nodejs_compat"],
