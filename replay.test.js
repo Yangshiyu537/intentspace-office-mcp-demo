@@ -92,6 +92,20 @@ test('再生画面：使用中の部屋に人数/定員、少人数は黄色、�
   assert.match(shell, /2026-02-25（水） 利用5件 ★/); assert.match(shell, /data-replay-play="1"/); assert.doesNotMatch(shell, /\{\w+\}|undefined/);
 });
 
+test('傾向の表示：小部屋の空き率は時刻を確認できた少人数予約を分母とする', () => {
+  const summary = createRealReplay(rows).summary();
+  assert.equal(summary.trend.used, 5);
+  assert.equal(summary.trend.free_checked, 3);
+  const ja = renderReplaySide('trend', summary, null, 600, translator('ja'), 'ja');
+  assert.match(ja, /大きい会議室の利用は5件/);
+  assert.match(ja, /少人数予約3件のうち、2件（66\.7%）/);
+  const en = renderReplaySide('trend', summary, null, 600, translator('en'), 'en');
+  assert.match(en, /Of 3 small-group bookings with valid times, 2 \(66\.7%\)/);
+  const noTimes = { ...summary, trend: { ...summary.trend, free_checked: 0, free_smaller: 0, free_percent: 0 } };
+  const empty = renderReplaySide('trend', noTimes, null, 600, translator('en'), 'en');
+  assert.match(empty, /No small-group bookings had valid times/);
+});
+
 test('公開ファイル一覧：ビルド・ローカル・Cloudflareの3か所が一致し、サーバー専用ファイルは含まない', async () => {
   const { readFile } = await import('node:fs/promises');
   const names = text => new Set([...text.matchAll(/'\/?([\w-]+\.(?:html|css|js))'/g)].map(m => m[1]));

@@ -62,9 +62,12 @@ function replaySideBody(mode, summary, day, minute, t, locale) {
   if (mode === 'trend') {
     const tr = summary?.trend;
     if (!tr) return '';
+    const availability = tr.free_checked ? fill(t('replayTrendAvailability'), {
+      available: tr.free_smaller.toLocaleString(), checked: tr.free_checked.toLocaleString(), free: tr.free_percent
+    }) : t('replayTrendNoAvailability');
     return '<div class="replayHeadline"><b>' + esc(fill(t('replayTrendHeadline'), { percent: tr.small_percent })) + '</b>'
-      + '<p>' + esc(fill(t('replayTrendSub'), { used: tr.used.toLocaleString(), start: summary.coverage.start, end: summary.coverage.end,
-        free: tr.free_percent })) + '</p></div>'
+      + '<p>' + esc(fill(t('replayTrendSub'), { used: tr.used.toLocaleString(), start: summary.coverage.start, end: summary.coverage.end }))
+      + ' ' + esc(availability) + '</p></div>'
       + '<ul class="replayList">' + tr.rooms.map(r => '<li><b>' + esc(fill(t('replayRoom'), { name: r.name, capacity: r.capacity })) + '</b><span>'
         + esc(fill(t('replayTrendRow'), { percent: r.small_percent, small: r.small, used: r.used, conservative: r.small_2to4_percent })) + '</span></li>').join('') + '</ul>';
   }
@@ -99,7 +102,7 @@ export function createReplayUI({ document, api, perform, getText, getLocale, isA
   let summary = null, day = null, date = null, minute = 10 * 60, mode = 'day', timer = null;
   function metrics() {
     if (!summary || summary.source !== 'enterprise_sample') return [];
-    if (mode === 'trend') { const tr = summary.trend; return [[t('replayMetricUsed3m'), tr.used.toLocaleString()], [t('replayMetricSmall'), tr.small_percent + '%'], [t('replayMetricFree'), tr.free_percent + '%']]; }
+    if (mode === 'trend') { const tr = summary.trend; return [[t('replayMetricUsed3m'), tr.used.toLocaleString()], [t('replayMetricSmall'), tr.small_percent + '%'], [t('replayMetricFree'), tr.free_checked ? tr.free_percent + '%' : '—']]; }
     const s = dayStats(day);
     return [[t('replayMetricDayUsed'), s.used], [t('replayMetricPeak'), s.peak], [t('replayMetricDaySmall'), s.big ? Math.round(s.small / s.big * 100) + '%' : '—']];
   }

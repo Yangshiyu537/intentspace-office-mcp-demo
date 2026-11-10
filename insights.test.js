@@ -60,6 +60,32 @@ test('採用・見送り：判断を記録し、採用後の変化を同じル�
   assert.equal(decideInsight(first, { finding_id: x, decision: 'rejected', at: now().toISOString() }).findings[x].decision.decision, 'rejected');
 });
 
+test('採用後の再確認：対象室の有効予約が不足している間は解消せず、データが揃ってから判定する', () => {
+  const first = detect(null, week1);
+  const original = byName(insightsView(first)).B;
+  const adopted = decideInsight(first, { finding_id: original.finding_id, decision: 'adopted', at: now().toISOString() });
+  const largeBooking = week2.find(row => row.name === 'B');
+  const otherRooms = week2.filter(row => row.name !== 'B');
+  for (const reservations of [[], otherRooms, [...otherRooms, largeBooking, largeBooking, { ...largeBooking, id: 'preset', source: 'preset' }]]) {
+    const sparse = detect(adopted, reservations, { revision: 2 });
+    const view = insightsView(sparse);
+    const b = byName(view).B;
+    assert.equal(b.status, 'open');
+    assert.equal(b.change, 'insufficient_data');
+    assert.equal(b.outcome.state, 'waiting');
+    assert.deepEqual(b.history, original.history);
+    assert.equal(view.last_run.counts.resolved, 0);
+    const t = translator('ja');
+    const html = renderInsightBoard(view, t, 'ja');
+    assert.ok(html.includes(t('insightRoomNoData')));
+    assert.match(html, /insightFlag-insufficient_data/);
+    assert.doesNotMatch(html, /100% → 現在 0%/);
+    const recovered = byName(insightsView(detect(sparse, week2, { revision: 3 }))).B;
+    assert.equal(recovered.status, 'resolved');
+    assert.equal(recovered.outcome.state, 'improved');
+  }
+});
+
 test('検知期間：今日以降の予約は含めず、データのある直近5日を使う。データなしは期間なし', () => {
   assert.equal(detectionWindow([], officeRooms, '2026-11-08'), null);
   const future = { ...week1[0], id: 'future', date: '2026-12-01' };

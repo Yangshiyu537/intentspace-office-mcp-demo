@@ -64,11 +64,13 @@ export function assistantMessage(view, t, locale = 'ja') {
   const improved = findings.filter(f => ['improved', 'better'].includes(f.outcome?.state));
   const resolved = findings.filter(f => f.status === 'resolved' && f.change === 'resolved' && !improved.includes(f));
   const ongoing = findings.filter(f => f.status === 'open' && f.change === 'persisting');
+  const waiting = findings.filter(f => f.change === 'insufficient_data');
   const parts = [t('insightSay_' + run.trigger)];
   if (fresh.length) parts.push(t('insightSay_new').replace('{rooms}', names(fresh)));
   if (improved.length) parts.push(t('insightSay_improved').replace('{rooms}', names(improved)));
   if (resolved.length) parts.push(t('insightSay_resolved').replace('{rooms}', names(resolved)));
   if (ongoing.length) parts.push(t('insightSay_ongoing').replace('{rooms}', names(ongoing)));
+  if (waiting.length) parts.push(t('insightSay_insufficient_data').replace('{rooms}', names(waiting)));
   if (parts.length === 1) parts.push(t('insightSay_none'));
   return parts.join(locale === 'en' ? ' ' : '');
 }
@@ -107,7 +109,8 @@ export function renderInsightBoard(view, t, locale = 'ja') {
 function insightCard(f, t, time) {
   const id = esc(f.finding_id), latest = f.latest ?? {}, range = latest.planned_people_range;
   const people = range ? (range.min === range.max ? range.min : range.min + '–' + range.max) : '—';
-  const fact = f.status === 'resolved' && f.after
+  const waiting = f.change === 'insufficient_data';
+  const fact = waiting ? t('insightRoomNoData') : f.status === 'resolved' && f.after
     ? fill(t('insightResolvedFact'), { total: f.after.total, count: f.after.oversized_count, percent: f.after.oversized_percent })
     : fill(t('insightOpenFact'), { total: latest.total, count: latest.oversized_count, percent: latest.oversized_percent, people, alternatives: latest.alternative_count });
   // A trend needs at least two checks; one value alone is shown in the fact sentence.
@@ -118,7 +121,7 @@ function insightCard(f, t, time) {
   if (decision) {
     actions = '<p class="insightDecision ' + esc(decision.decision) + '"><b>' + esc(t(decision.decision === 'adopted' ? 'insightAdopted' : 'insightRejected')) + '</b> '
       + esc(time(decision.at)) + '</p><div class="row"><button type="button" data-insight-decide="reopened" data-insight-id="' + id + '">' + esc(t('insightUndo')) + '</button></div>';
-  } else if (f.status === 'open') {
+  } else if (f.status === 'open' && !waiting) {
     actions = '<div class="row insightButtons"><button type="button" class="primary" data-insight-decide="adopted" data-insight-id="' + id + '">' + esc(t('insightAdopt')) + '</button>'
       + '<button type="button" data-insight-decide="rejected" data-insight-id="' + id + '">' + esc(t('insightReject')) + '</button>'
       + '<button type="button" data-insight-investigate="' + id + '">' + esc(t('insightInvestigate')) + '</button></div>';
@@ -132,7 +135,7 @@ function insightCard(f, t, time) {
     + '<h3>' + esc(fill(t('insightRoom'), { name: f.name, capacity: latest.capacity ?? '' })) + '</h3></header>'
     + '<p>' + esc(fact) + '</p>'
     + (trend ? '<p class="small"><b>' + esc(t('insightTrend')) + '</b> ' + esc(trend) + '</p>' : '')
-    + (f.status === 'open' ? '<p class="insightProposal"><b>' + esc(t('insightProposal')) + '</b> ' + esc(t(step)) + '</p>' : '')
+    + (f.status === 'open' && !waiting ? '<p class="insightProposal"><b>' + esc(t('insightProposal')) + '</b> ' + esc(t(step)) + '</p>' : '')
     + outcome + actions + '</article>';
 }
 

@@ -42,7 +42,8 @@ export function runInsightDetection(previous, { rooms, reservations, today, at, 
   const state = structuredClone(previous?.rule_version === INSIGHT_RULE_VERSION ? previous : emptyInsights());
   const period = detectionWindow(reservations, rooms, today);
   const seq = state.run_count + 1, runId = 'run-' + seq;
-  const analysis = period ? analyzeRoomFit({ rooms, reservations }, period) : null;
+  const roomMetrics = new Map();
+  const analysis = period ? analyzeRoomFit({ rooms, reservations }, period, { roomMetrics }) : null;
   const flagged = new Map((analysis?.items ?? []).map(item => [item.finding_id, item]));
   const counts = { new: 0, persisting: 0, resolved: 0, recurred: 0 };
   for (const [id, item] of flagged) {
@@ -63,21 +64,19 @@ export function runInsightDetection(previous, { rooms, reservations, today, at, 
   }
   for (const finding of Object.values(state.findings)) {
     if (flagged.has(finding.finding_id) || finding.status === 'resolved') continue;
-    // The room no longer meets the rule. Keep the latest measured values for the outcome view.
-    const item = rooms.find(room => room.id === finding.room_id);
-    const records = (analysis ? reservations.filter(r => r.space_id === finding.room_id && r.date >= period.start_date && r.date <= period.end_date
-      && !r.deleted && r.status !== 'cancelled' && r.source !== 'attendance') : []);
-    const rule = analysis?.rule ?? { max_people: 4, max_capacity_ratio: 0.5 };
-    const small = records.filter(r => Number.isInteger(r.people) && item && r.people <= rule.max_people && r.people / item.capacity <= rule.max_capacity_ratio);
-    const after = { total: records.length, oversized_count: small.length,
-      oversized_percent: records.length ? Math.round(small.length / records.length * 100) : 0, alternative_count: null };
+    const metrics = roomMetrics.get(finding.room_id);
+    if (!metrics || metrics.total < analysis.rule.min_room_reservations) {
+      finding.change = 'insufficient_data';
+      continue;
+    }
+    const after = { ...metrics, alternative_count: null };
     Object.assign(finding, { status: 'resolved', change: 'resolved', resolved_run: runId, after });
     finding.history.push({ run_id: runId, seq, at, period, flagged: false, ...after });
     counts.resolved++;
   }
   for (const finding of Object.values(state.findings)) finding.history = finding.history.slice(-MAX_HISTORY);
   state.runs.push({ id: runId, at, trigger, revision, today, period, eligible_count: analysis?.eligible_count ?? 0,
-    status: analysis?.status ?? 'insufficient_data', open_count: flagged.size, counts });
+    status: analysis?.status ?? 'insufficient_data', open_count: Object.values(state.findings).filter(f => f.status === 'open').length, counts });
   state.runs = state.runs.slice(-MAX_RUNS);
   Object.assign(state, { last_revision: revision, last_run_date: today, run_count: state.run_count + 1, rule: analysis?.rule ?? null });
   return state;
@@ -110,17 +109,17 @@ export function insightOutcome(finding) {
   const decision = finding.decision;
   if (!decision || decision.decision !== 'adopted') return null;
   const later = finding.history.filter(entry => entry.seq > decision.after_seq);
-  if (!later.length) return { state: 'waiting', baseline: decision.baseline };
+  if (!later.length || finding.change === 'insufficient_data') return { state: 'waiting', baseline: decision.baseline };
   const last = later.at(-1);
   const delta = last.oversized_percent - decision.baseline.oversized_percent;
-  return { state: !last.flagged ? 'improved' : delta < 0 ? 'better' : delta > 0 ? 'worse' : 'unchanged',
+  return { state: delta < 0 ? (last.flagged ? 'better' : 'improved') : delta > 0 ? 'worse' : 'unchanged',
     baseline: decision.baseline, current: { total: last.total, oversized_count: last.oversized_count, oversized_percent: last.oversized_percent } };
 }
 
 // Public, read-only view for the administrator screen.
 export function insightsView(insights) {
   const state = insights ?? emptyInsights();
-  const order = { new: 0, recurred: 1, persisting: 2, resolved: 3 };
+  const order = { new: 0, recurred: 1, persisting: 2, insufficient_data: 3, resolved: 4 };
   const findings = Object.values(state.findings).map(finding => ({ ...finding, outcome: insightOutcome(finding) }))
     .sort((a, b) => (order[a.change] ?? 9) - (order[b.change] ?? 9) || (b.latest?.oversized_count ?? 0) - (a.latest?.oversized_count ?? 0) || a.name.localeCompare(b.name));
   return { rule_version: state.rule_version, rule: state.rule ?? null, last_run: state.runs.at(-1) ?? null, runs: [...state.runs].reverse(),
