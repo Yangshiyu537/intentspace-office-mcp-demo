@@ -16,7 +16,34 @@
   <section class="planPane wood" data-mobile-pane="plan">
     <div class="sectionTitle"><span class="avatar">A</span><h1 data-i18n="planTitle"></h1></div>
     <p class="intro" data-i18n="planHint"></p>
-    <button id="openCalendar" class="calendarEntry" data-i18n="calendarOpen"></button>
+    <div class="quickCalendar"><button id="openCalendar" class="calendarEntry" data-i18n="calendarOpen"></button><span id="keyBadge" class="keyBadge"></span></div>
+    <div class="quickOptions" role="group" aria-labelledby="quickLabel">
+      <span id="quickLabel" class="small" data-i18n="quickLabel"></span>
+      <button type="button" class="quickFocus" id="quickFocus" aria-controls="focusForm" aria-expanded="false" data-i18n="quickFocus"></button>
+      <button type="button" class="quickTalk" id="quickTalk" aria-controls="talkForm" aria-expanded="false" data-i18n="quickTalk"></button>
+      <button type="button" class="quickJoin" id="quickJoin" aria-controls="joinForm" aria-expanded="false" data-i18n="quickJoin"></button>
+      <button type="button" class="quickNatural" id="quickNatural" aria-controls="intentForm" aria-expanded="true" data-i18n="quickNatural"></button>
+    </div>
+    <form id="focusForm" class="quickForm" hidden>
+      <p class="small" data-i18n="quickFocusHint"></p>
+      <label><span data-i18n="duration"></span><select id="focusDuration"><option value="30">30</option><option value="60" selected>60</option><option value="90">90</option><option value="120">120</option></select></label>
+      <button class="primary" data-i18n="quickFindSeat"></button>
+    </form>
+    <form id="talkForm" class="quickForm" hidden>
+      <div class="editGrid">
+        <label><span data-i18n="people"></span><input id="talkPeople" type="number" min="2" max="100" value="2" required></label>
+        <label><span data-i18n="duration"></span><input id="talkDuration" type="number" min="15" max="480" value="30" required></label>
+      </div>
+      <label class="quickCheck"><input type="checkbox" id="talkRoom" checked><span data-i18n="quickNeedRoom"></span></label>
+      <button class="primary" data-i18n="quickFindTalk"></button>
+      <p id="talkSuggestion" class="small" role="status" hidden data-i18n="quickTalkArea"></p>
+    </form>
+    <form id="joinForm" class="quickForm" hidden>
+      <label><span data-i18n="quickJoinSelect"></span><select id="joinReservation" required></select></label>
+      <button class="primary" id="joinConfirm" data-i18n="registerAttendance"></button>
+      <p id="joinStatus" class="small" role="status"></p>
+      <button type="button" id="quickJoinManual" class="subtle" data-i18n="quickJoinManual"></button>
+    </form>
     <form id="intentForm" class="planForm">
       <label><span data-i18n="planSourceLabel"></span><select id="planSource" data-label="planSourceLabel"><option value="manual" data-i18n="sourceManual"></option><option value="calendar" data-i18n="sourceCalendar"></option></select></label>
       <div id="calendarExportControls" class="calendarExportControls" hidden><button type="button" id="calendarRangeToggle" class="subtle" hidden></button><div class="editGrid"><label><span data-i18n="startDate"></span><input id="calendarExportStart" type="date"></label><label><span data-i18n="endDate"></span><input id="calendarExportEnd" type="date"></label></div><button type="button" id="exportCalendar" data-i18n="calendarExport"></button><p class="small" data-i18n="calendarExportWindow"></p></div>
@@ -25,12 +52,10 @@
       <label id="calendarSupplementLabel" hidden><span data-i18n="calendarSupplement"></span><input id="calendarSupplement" maxlength="1200" data-placeholder="calendarSupplementHint"></label>
       <p id="calendarImportStatus" class="small" role="status" hidden></p>
       <div class="row"><button type="button" id="calendarTrace" hidden data-i18n="calendarTrace"></button></div>
-      <div class="row"><button type="button" id="useExample" class="subtle" data-i18n="example"></button><span id="keyBadge" class="keyBadge"></span></div>
+      <div class="row"><button type="button" id="useExample" class="subtle" data-i18n="example"></button></div>
       <button id="parseButton" class="primary" data-i18n="analyse"></button>
     </form>
-    <p class="small" data-i18n="modeHelp"></p>
-    <div class="responsibility"><span class="ori" aria-hidden="true">▣</span><p data-i18n="gptUse"></p></div>
-    <div class="dayReference"><span data-i18n="currentDate"></span><time id="today"></time></div>
+    <p id="naturalHelp" class="small" data-i18n="modeHelp"></p>
   </section>
   <section class="worldPane" data-mobile-pane="map">
     <div class="mapHeader wood"><h2 data-i18n="mapTitle"></h2><div><span data-i18n="simClock"></span> <time id="worldClock"></time></div></div>

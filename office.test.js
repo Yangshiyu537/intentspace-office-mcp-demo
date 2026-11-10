@@ -825,6 +825,7 @@ async function employeeUi({dayParser,answerer,calendarAgent,calendarFault,equipm
   }
   if(!dayParser&&autoKey){get('key').value='test_key_not_real_1234567890';get('model').value='gpt-4.1-mini';await fire(get('keyForm'),'submit');}
   return {get,controller,request,location,queueSnapshot:value=>{nextWorkspace=value;},
+    submitForm:async id=>fire(get(id),'submit'),
     restoreRoute:async url=>{location.href=new URL(url,location);await fire(uiWindow,'popstate');},
     ask:async question=>{get('adminQuestion').value=question;await fire(get('adminAskForm'),'submit');},
     configureGpt:async()=>{get('key').value='test_key_not_real_1234567890';get('model').value='gpt-4.1-mini';await fire(get('keyForm'),'submit');},
@@ -2165,6 +2166,61 @@ test('设备来源安全：HTML与评论中的指令按原文显示，无模型�
   const failed=await employeeUi({role:'admin',equipmentData:{source:'error'}});await failed.adminSection('equipment');assert.match(failed.get('adminResults').innerHTML,/could not be loaded/);
   assert.throws(()=>createEquipmentFeedback({satisfactionRows:[{wrong:'columns'}],spaceRows:[],sources:{}}),/equipment_read_error/);
 });
+test('快捷入口：专注和聊天复用推荐，确认前不预约，自然语言仍可用', async () => {
+  const inputs=[];
+  const ui=await employeeUi({dayParser:async (_key,{message})=>{
+    inputs.push(message);
+    if(inputs.length===3)return fixturePlan(message);
+    const focus=message.includes('quiet desk');
+    return {activities:[{type:focus?'desk':'meeting',title:focus?'Focus':'Conversation',date:today,time:null,
+      window_start:'09:00',window_end:'18:00',duration:focus?60:30,people:focus?1:2,
+      features:focus?['quiet']:[],participants:[],existing_id:null,unclear:[]}],questions:[]};
+  },includeLegacyPresets:false});
+  await ui.configureGpt();
+  ui.get('focusDuration').value='60';
+  await ui.tab('quickFocus');
+  assert.equal(ui.get('focusForm').hidden,false);
+  assert.match(inputs[0],/quiet desk for 60 minutes/);
+  assert.match(ui.get('agendaContent').innerHTML,/data-confirm/);
+  assert.equal((await ui.state()).meetings.length,0);
+  await ui.tab('quickTalk');
+  ui.get('talkPeople').value='2';
+  ui.get('talkDuration').value='30';
+  await ui.submitForm('talkForm');
+  assert.equal(ui.get('talkSuggestion').hidden,false);
+  assert.equal(inputs.length,1);
+  ui.get('talkRoom').checked=true;
+  await ui.submitForm('talkForm');
+  assert.match(inputs[1],/2 people total, for 30 minutes/);
+  assert.equal((await ui.state()).meetings.length,0);
+  await ui.click('data-confirm');
+  assert.equal((await ui.state()).meetings[0].people,2);
+  await ui.tab('quickNatural');
+  assert.equal(ui.get('intentForm').hidden,false);
+  await ui.submit('Today 13:00 review for 4 people, 30 minutes');
+  assert.equal(inputs.length,3);
+});
+
+test('快捷入口：从列表选择会议，确认后才登记关联的参加记录',async()=>{
+  const ui=await employeeUi({autoKey:false,includeLegacyPresets:false});
+  const created=await ui.request('/api/office/admin/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    operation_id:randomUUID(),confirmed:true,data:{title:'Team review',date:today,time:'14:00',duration:30,people:3,
+      space_id:'office-c04',booked_by:'Demo organiser',assigned_to:'other',features:[]}
+  })});
+  assert.equal(created.status,200);
+  const original=(await created.json()).record;
+  await ui.tab('quickJoin');
+  assert.equal(ui.get('joinForm').hidden,false);
+  assert.match(ui.get('joinReservation').innerHTML,/Team review/);
+  assert.equal((await ui.state()).meetings.length,0);
+  ui.get('joinReservation').value=original.id;
+  await ui.submitForm('joinForm');
+  const state=await ui.state();
+  assert.equal(state.reservations.length,1);
+  assert.equal(state.meetings[0].organizer_reservation_id,original.id);
+  assert.match(ui.get('agendaContent').innerHTML,/Attendance linked to the original booking/);
+});
+
 test('社員・管理者の往復と履歴移動で一時Keyを共有し、消去後は送信しない', async () => {
   const keys = [];
   const ui = await employeeUi({

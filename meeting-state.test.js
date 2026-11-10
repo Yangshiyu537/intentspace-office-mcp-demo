@@ -637,6 +637,31 @@ const adminData={title:'Design review',date:today,time:'09:00',duration:30,peopl
 const mutation=(data=adminData)=>({operation_id:randomUUID(),confirmed:true,data:{...data}});
 const recordMutation=record=>({operation_id:randomUUID(),confirmed:true,meeting_id:record.id,expected_version:record.version});
 
+test('参加：予約IDと版を検証し、元の部屋予約を増やさずに参加を登録する',async()=>{
+  const call=api();
+  await call('workspace/reset',{confirmed:true});
+  const original=(await call('admin/create',mutation())).body.record;
+  const updated=(await call('admin/update',{...recordMutation(original),data:{...adminData,title:'Updated review'}})).body.record;
+  const list=(await call('attendance')).body.items;
+  assert.ok(list.some(item=>item.id===updated.id&&item.version===updated.version));
+  const input={reservation_id:original.id,expected_version:original.version,confirmed:true};
+  assert.equal((await call('attendance',input)).body.error,'attendance_source_changed');
+  assert.equal((await call('attendance',{...input,expected_version:updated.version,confirmed:false})).status,400);
+  input.expected_version=updated.version;
+  const joined=await call('attendance',input);
+  assert.equal(joined.status,200);
+  assert.equal(joined.body.meeting.organizer_reservation_id,original.id);
+  assert.equal(joined.body.meeting.booking_required,false);
+  assert.equal((await call('attendance',input)).body.meeting.id,joined.body.meeting.id);
+  const workspace=(await call('workspace')).body;
+  assert.equal(workspace.reservations.filter(item=>item.title==='Updated review').length,1);
+  assert.equal(workspace.meetings.length,1);
+  await call('admin/cancel',recordMutation(updated));
+  assert.ok(!(await call('attendance')).body.items.some(item=>item.id===updated.id));
+  assert.equal((await call('transition',{meeting_id:joined.body.meeting.id,action:'start'})).body.error,'attendance_source_changed');
+  assert.equal((await call('workspace')).body.current_meetings[0].attendance_source_changed,true);
+});
+
 test('管理一覧：プリセットの所有者・日付・状態・検索・ページングを確認できる',async()=>{
   const call=api();
   const list=await call('admin/reservations');assert.equal(list.status,200);assert.equal(list.body.total,93);

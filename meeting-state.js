@@ -141,9 +141,18 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
     previous.replaced_by=next.id;event('rebooked',previous);
   }
   const occupied = all => all.filter(r=>!r.deleted&&r.status!=='cancelled').map(r=>({...r,end:r.status==='completed'?minutes(r.actual_end):r.end}));
-  const calendar = () => structuredClone(occupied([...reservations(),...records.filter(r=>r.source==='attendance'&&r.status==='in_progress')]));
+  const calendar = () => structuredClone(occupied([...reservations(),...records.filter(r=>r.source==='attendance'&&r.status==='in_progress'&&!r.organizer_reservation_id)]));
+  const joinableReservations = () => reservations().filter(r=>r.assigned_to==='other'&&r.request.kind==='meeting'&&r.status==='reserved'&&isCurrent(r))
+    .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const linkedMeetingChanged = record => {
+    if(!record.organizer_reservation_id)return false;
+    const original=reservations().find(r=>r.id===record.organizer_reservation_id);
+    return !original||original.deleted||!['reserved','in_progress'].includes(original.status)
+      ||original.date!==record.date||original.time!==record.time||original.end_time!==record.end_time||original.space_id!==record.space_id;
+  };
   const snapshot = () => {
-    const own=records.filter(r=>r.assigned_to==='A'&&!(r.deleted&&r.bulk_cleared)).map(r=>({...r,replacement_id:replacementFor(r)}));
+    const own=records.filter(r=>r.assigned_to==='A'&&!(r.deleted&&r.bulk_cleared)).map(r=>({...r,replacement_id:replacementFor(r),
+      ...(r.organizer_reservation_id&&r.status==='reserved'?{attendance_source_changed:linkedMeetingChanged(r)}:{})}));
     const history=records.filter(record=>record.source==='demo_history'),dates=history.map(record=>record.date).sort();
     return structuredClone({instance_id:instanceId,revision,reset_generation:resetGeneration,clock:demoClock,rooms,meetings:ownMeetings(),
       current_meetings:own.filter(isCurrent),meeting_history:own.filter(r=>!isCurrent(r)),calendar_revision:employeeCalendar.snapshot().revision,
@@ -232,7 +241,29 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
       ...(rebooking?{rebooked_from:rebooking.id}:{})};
     records.push(booking);event('reserved',booking);linkReplacement(rebooking,booking);return {booking:structuredClone(booking),reused:false};
   }
+  function joinReservation(raw) {
+    const schema=z.object({reservation_id:z.string().min(1).max(160),expected_version:z.number().int().min(0),confirmed:z.literal(true)}).strict();
+    const parsed=schema.safeParse(raw);
+    if(!parsed.success)throw new HttpError(400,'invalid_attendance');
+    const {reservation_id,expected_version}=parsed.data;
+    const original=joinableReservations().find(r=>r.id===reservation_id);
+    if(!original||original.version!==expected_version)throw new HttpError(409,'attendance_source_changed');
+    const prior=ownMeetings().find(r=>r.organizer_reservation_id===original.id&&isCurrent(r)&&!linkedMeetingChanged(r));
+    if(prior)return {meeting:structuredClone(prior),reused:true};
+    if(occupied(ownMeetings()).some(r=>overlap(original,r)))throw new HttpError(409,'personal_conflict');
+    assertCapacity();
+    const {date,time,start,end,end_time,space_id,name,title,people,booked_by,request}=original;
+    const participants=original.participants??[];
+    const record={date,time,start,end,end_time,space_id,name,title,people,booked_by,request,participants,
+      id:randomUUID(),assigned_to:'A',source:'attendance',booking_required:false,version:0,status:'reserved',
+      actual_start:null,actual_end:null,deleted:false,organizer_reservation_id:original.id,
+      attendance_activity:{...request,type:'meeting',title,window_start:null,window_end:null,participants,existing_id:null,unclear:[]},attendance_blocks:[]};
+    records.push(record);
+    event('attendance_registered',record);
+    return {meeting:structuredClone(record),reused:false};
+  }
   function attend(raw) {
+    if(raw&&Object.hasOwn(raw,'reservation_id'))return joinReservation(raw);
     if(raw?.plan_id&&getPlan(raw.plan_id).calendar_origin)throw new HttpError(409,'calendar_recheck');
     const schema=z.object({plan_id:z.string().min(1).optional(),proposal_id:z.string().min(1).optional(),
       meeting_id:z.string().min(1).optional(),space_id:z.string().min(1).max(100),time:timeSchema}).strict();
@@ -244,6 +275,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
       if(input.plan_id||input.proposal_id)throw new HttpError(400,'invalid_attendance');
       const previous=ownMeetings().find(r=>r.id===input.meeting_id);
       if(!previous||previous.source!=='attendance')throw new HttpError(404,'meeting_missing');
+      if(previous.organizer_reservation_id)throw new HttpError(409,'attendance_source_changed');
       if(previous.status!=='cancelled')throw new HttpError(409,'invalid_transition');
       activity=previous.attendance_activity;blocks=previous.attendance_blocks;
       plan_id=previous.plan_id;proposal_id=previous.proposal_id;
@@ -287,6 +319,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
     if(action==='start'){
       if(record.status==='in_progress')return snapshot();
       if(record.status!=='reserved')throw new HttpError(409,'invalid_transition');
+      if(linkedMeetingChanged(record))throw new HttpError(409,'attendance_source_changed');
       if(ownMeetings().some(r=>r.status==='in_progress'))throw new HttpError(409,'already_in_meeting');
       assertFuture(record);
       record.status='in_progress';record.actual_start=record.time;
@@ -480,6 +513,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
       if(input.expected_version!==record.version)throw new HttpError(409,'record_changed');
       if(action==='purge'&&!record.deleted)throw new HttpError(409,'purge_deleted_only');
       if(record.status==='in_progress'&&action==='update')throw new HttpError(409,'active_readonly');
+      if(record.organizer_reservation_id&&action==='update')throw new HttpError(409,'attendance_readonly');
       if(action==='update'&&record.deleted)throw new HttpError(409,'record_readonly');
       if(action==='finish'&&(record.deleted||record.status!=='in_progress')||action==='cancel'&&(record.deleted||record.status!=='reserved'))throw new HttpError(409,'invalid_transition');
       if(action==='delete'&&record.deleted||action==='restore'&&!record.deleted)throw new HttpError(409,'invalid_transition');
@@ -547,7 +581,7 @@ export function createMeetingState({rooms, now=()=>new Date(),persisted,initialR
     if(new TextEncoder().encode(JSON.stringify(state)).byteLength>1800000)throw new HttpError(422,'workspace_limit');
     return state;
   }
-  return {snapshot,referenceDate,calendar,savePlan,getPlan,confirm,attend,transition,queryReservations,previewClear,clearRecords,
+  return {snapshot,referenceDate,calendar,savePlan,getPlan,confirm,attend,joinableReservations,transition,queryReservations,previewClear,clearRecords,
     employeeCalendar:()=>employeeCalendar.snapshot(),changeCalendar(input){if(employeeCalendar.change(input,referenceDate()))revision++;return employeeCalendar.snapshot();},
     createCalendarExport:input=>employeeCalendar.createExport(input,referenceDate(),now().getTime()),
     getCalendarExport:id=>employeeCalendar.getExport(id,now().getTime()),

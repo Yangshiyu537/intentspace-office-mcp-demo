@@ -146,6 +146,10 @@ export function createOfficeService({now=()=>new Date(),gptParser=parseOfficeInt
     }
     if(path==='/api/office/comfort'&&request.method==='GET')return json(comfortSummary??{source:'unavailable',items:[],mapped_to_demo_seats:false});
     if(path==='/api/office/workspace'&&request.method==='GET')return json({...workspace.snapshot(),today});
+    if(path==='/api/office/attendance'&&request.method==='GET'){
+      const items=workspace.joinableReservations().map(({id,version,title,date,time,end_time,name})=>({id,version,title,date,time,end_time,name}));
+      return json({items,simulation:true});
+    }
     if(path==='/api/office/calendar'){
       if(request.method==='GET')return json({...workspace.employeeCalendar(),instance_id:workspace.snapshot().instance_id,today});
       if(request.method!=='POST')throw new HttpError(405,'method');
@@ -417,6 +421,7 @@ export async function handleStoredOfficeRequest(request,storage,{now=()=>new Dat
     '/api/office/transition','/api/office/replan','/api/office/rebook',...['create','update','delete','restore','finish','cancel','purge','clear-preview','clear','purge-preview','purge-deleted'].map(a=>'/api/office/admin/'+a)];
   writes.push('/api/office/calendar/analyze','/api/office/calendar/export','/api/office/calendar/review');
   if(path==='/api/office/calendar'){if(request.method==='GET')reads.push(path);else writes.push(path);}
+  if(path==='/api/office/attendance'&&request.method==='GET')reads.push(path);
   if(!reads.includes(path)&&!writes.includes(path)&&!readonlyPosts.includes(path))throw new HttpError(404,'invalid_action');
   if(request.method!==(reads.includes(path)?'GET':'POST'))throw new HttpError(405,'invalid_action');
   const saved=storage.load();

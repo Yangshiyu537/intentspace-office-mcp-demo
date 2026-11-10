@@ -30,6 +30,7 @@ let calendarUI=null;
 let equipmentUI=null;
 const improvementScope=()=>$('improvementScope').value||'allocation';
 let planSource='manual',manualDraft='',calendarExport=null,calendarReviewReport=null,calendarRangeOpen=true;
+let joinOptions=[];
 
 async function http(path, {body, headers = {}, signal, timeoutMs=70000, method = body === undefined ? 'GET' : 'POST'} = {}) {
   let response;
@@ -141,6 +142,8 @@ function lock(value) {
   $('improvementForm').querySelectorAll('input,button').forEach(el=>{el.disabled=value;});
   document.querySelectorAll('#intentForm button,#intentForm select,#intentForm textarea,#agendaContent button,#agendaContent select,#adminAskForm button,#adminQuery input,#adminQuery button,#liveQuery input,#liveQuery select,#liveQuery button,#adminEditForm input,#adminEditForm select,#adminEditForm button,#editForm input,#editForm select,#editForm button,#adminDeleteConfirm,[data-admin],#adminRefresh,#reviewDemo,#keyForm button:not(#clearKey),#proposalsTab,#bookingsTab,[data-close]').forEach(el=>{el.disabled=value;});
   $('attendanceForm').querySelectorAll('input,select,button').forEach(el=>{el.disabled=value;});
+  document.querySelectorAll('.quickOptions button,.quickForm input,.quickForm select,.quickForm button').forEach(el=>{el.disabled=value;});
+  $('joinConfirm').disabled=value||!joinOptions.length;
   $('historyTab').disabled=value;
   $('adminPurgeAgree').disabled=value;
   $('adminClear').disabled=value;
@@ -272,7 +275,7 @@ function setupLanguage() {
   $('keyBadge').textContent=t(apiSession.source==='local'?'localKeyBadge':apiSession.configured?'withKey':'noKey');
   $('keyBadge').classList.toggle('connected',apiSession.configured);
   renderKeyConfigBadge();
-  if(workspace)$('today').textContent=workspace.today;
+  renderJoinOptions();
   calendarUI?.render();
   renderCalendarInput();
   renderAgenda();renderMap();renderAdmin();renderMobile();
@@ -329,11 +332,12 @@ function renderAgenda() {
     const next=latestRecord(item),replaced=next?.id!==item.id||Boolean(item.replacement_id||item.replaced_by);
     const active=agendaTab==='bookings';
     const actions=item.deleted?'':replaced?next?.id!==item.id?'<button class="primary" data-view-booking="'+escape(next.id)+'">'+t('showReplacement')+'</button>':''
-      :active&&item.status==='reserved'?'<button class="primary" data-meeting-action="start">'+t(item.request.kind==='desk'?'seatStart':'start')+'</button><button data-meeting-action="cancel">'+t(item.source==='attendance'?'withdrawAttendance':'cancel')+'</button>'
+      :active&&item.status==='reserved'?(item.attendance_source_changed?'':'<button class="primary" data-meeting-action="start">'+t(item.request.kind==='desk'?'seatStart':'start')+'</button>')+'<button data-meeting-action="cancel">'+t(item.source==='attendance'?'withdrawAttendance':'cancel')+'</button>'
       :item.status==='in_progress'?'<button class="primary" data-meeting-action="finish">'+t(item.request.kind==='desk'?'seatFinish':'finish')+'</button>'
-      :item.status==='cancelled'&&item.date>=workspace.today?item.source==='attendance'?'<button class="primary" data-attendance-record="'+escape(item.id)+'">'+t('registerAgain')+'</button>':'<button class="primary" data-rebook="'+escape(item.id)+'">'+t('rebook')+'</button>':'';
+      :item.status==='cancelled'&&item.date>=workspace.today?item.source==='attendance'?(item.organizer_reservation_id?'':'<button class="primary" data-attendance-record="'+escape(item.id)+'">'+t('registerAgain')+'</button>'):'<button class="primary" data-rebook="'+escape(item.id)+'">'+t('rebook')+'</button>':'';
     const status=item.deleted?'deleted':replaced?'rebooked':!active&&item.status==='reserved'?'unstartedHistory':meetingState(item);
-    $('agendaContent').innerHTML='<article class="agendaCard"><span class="statePill">'+t(status)+'</span><h3 class="cardTitle">'+escape(item.title)+'</h3>'+facts({...item,duration:item.request.duration},item.request)+'<p class="equipment">'+escape(item.name)+' / '+item.request.features.map(f=>escape(t(f))).join(', ')+'</p>'+(item.source==='attendance'?'<p class="cardBody">'+t('attendanceSource')+'</p>':'')+'<div class="cardActions">'+actions+'<button data-details="booking">'+t('details')+'</button></div></article>';
+    const sourceLabel=item.attendance_source_changed?'attendance_source_changed':item.organizer_reservation_id?'quickLinkedAttendance':'attendanceSource';
+    $('agendaContent').innerHTML='<article class="agendaCard"><span class="statePill">'+t(status)+'</span><h3 class="cardTitle">'+escape(item.title)+'</h3>'+facts({...item,duration:item.request.duration},item.request)+'<p class="equipment">'+escape(item.name)+' / '+item.request.features.map(f=>escape(t(f))).join(', ')+'</p>'+(item.source==='attendance'?'<p class="cardBody">'+t(sourceLabel)+'</p>':'')+'<div class="cardActions">'+actions+'<button data-details="booking">'+t('details')+'</button></div></article>';
   }else{
     const a=item.activity;
     const currentRecords=[...(workspace?.reservations??[]),...employeeRecords()];
@@ -451,7 +455,7 @@ async function sync() {
       if(valid.length!==plan.proposals.length){plan=valid.length?{...plan,proposals:valid}:null;tell('calendar_changed',true);}
     }else if(origin.revision!==result.calendar_revision){plan=null;agendaTab='proposals';agendaIndex=0;tell('calendar_changed',true);}
   }
-  workspace=result;$('today').textContent=result.today;
+  workspace=result;
   calendarUI?.changed();
   if(restarted){calendarExport=null;calendarReviewReport=null;}
   renderCalendarInput();
@@ -517,15 +521,13 @@ async function rebook(id){
   await sync();plan=result;agendaTab='proposals';agendaIndex=0;pane='agenda';
   tell('rebookReady');renderAgenda();renderMap();renderMobile();
 }
-$('intentForm').addEventListener('submit',event=>{
-  event.preventDefault();
-  if(planSource==='calendar'){perform(reviewExport);return;}
-  perform(async()=>{
+function analysePlan(message){
+  return perform(async()=>{
     generation++;const current=generation;operation?.abort();operation=new AbortController();tell('analysing');
     plan=null;agendaTab='proposals';agendaIndex=0;renderAgenda();renderMap();
     if(!apiSession.configured){$('settingsDialog').showModal();throw new Error('keyRequired');}
-    const auth=apiSession.begin($('intent').value);
-    const result=await api('day-plan',{body:{message:$('intent').value,mode:'gpt',locale,model:apiSession.model},headers:auth.headers,signal:AbortSignal.any([operation.signal,auth.signal])});
+    const auth=apiSession.begin(message);
+    const result=await api('day-plan',{body:{message,mode:'gpt',locale,model:apiSession.model},headers:auth.headers,signal:AbortSignal.any([operation.signal,auth.signal])});
     if(current!==generation||disposed)return;
     plan=result;agendaTab='proposals';agendaIndex=Math.max(0,result.proposals.findIndex(p=>['meeting','desk'].includes(p.activity.type)));pane='agenda';
     tell('analysisDone');renderAgenda();renderMap();renderMobile();
@@ -537,6 +539,84 @@ $('intentForm').addEventListener('submit',event=>{
       else if(!result.proposals.length)showDetail(t('needs_input'),result.questions.map(localisedIssue).join('\n\n'));
     }
   });
+}
+const quickPanels={quickFocus:'focusForm',quickTalk:'talkForm',quickJoin:'joinForm',quickNatural:'intentForm'};
+function showQuickPanel(active){
+  for(const [button,panel] of Object.entries(quickPanels)){
+    $(panel).hidden=button!==active;
+    $(button).setAttribute('aria-expanded',String(button===active));
+  }
+  $('naturalHelp').hidden=active!=='quickNatural';
+}
+function renderJoinOptions(){
+  const select=$('joinReservation'),selected=select.value;
+  select.innerHTML='<option value="">'+escape(t('quickJoinChoose'))+'</option>'+joinOptions.map(item=>
+    '<option value="'+escape(item.id)+'">'+escape(item.date+' '+item.time+'–'+item.end_time+' / '+item.name+' / '+item.title)+'</option>').join('');
+  if(joinOptions.some(item=>item.id===selected))select.value=selected;
+  $('joinConfirm').disabled=working||!joinOptions.length;
+}
+async function loadJoinOptions(){
+  const result=await api('attendance');
+  joinOptions=result.items;
+  renderJoinOptions();
+  $('joinStatus').textContent=t(joinOptions.length?'quickJoinHint':'quickJoinEmpty');
+}
+function suggestFocus(){
+  if(!workspace){tell('demo_network',true);return;}
+  return analysePlan('On '+workspace.today+' I want to reserve one quiet desk for '+$('focusDuration').value
+    +' minutes in the flexible window 09:00 to 18:00, with no fixed start time.');
+}
+$('quickFocus').addEventListener('click',()=>{if(!working){showQuickPanel('quickFocus');return suggestFocus();}});
+$('focusForm').addEventListener('submit',event=>{event.preventDefault();return suggestFocus();});
+$('quickTalk').addEventListener('click',()=>{if(!working)showQuickPanel('quickTalk');});
+$('talkForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  if(working||!workspace)return;
+  const people=Number($('talkPeople').value),duration=Number($('talkDuration').value);
+  if(!Number.isInteger(people)||people<2||people>100||!Number.isInteger(duration)||duration<15||duration>480)return;
+  $('talkSuggestion').hidden=$('talkRoom').checked;
+  if(!$('talkRoom').checked){activeArea='connect';renderMap();return;}
+  return analysePlan('On '+workspace.today+' I want to reserve a meeting room for a conversation, '+people
+    +' people total, for '+duration+' minutes in the flexible window 09:00 to 18:00, with no fixed start time.');
+});
+$('quickJoin').addEventListener('click',()=>{
+  if(working)return;
+  showQuickPanel('quickJoin');
+  $('joinStatus').textContent=t('busy');
+  return perform(loadJoinOptions);
+});
+$('joinForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const source=joinOptions.find(item=>item.id===$('joinReservation').value);
+  if(working||!source)return;
+  return perform(async()=>{
+    try{
+      const result=await api('attendance',{body:{reservation_id:source.id,expected_version:source.version,confirmed:true}});
+      await sync();if(disposed)return;
+      tell(result.reused?'reused':'attendanceRegistered');
+      showBooking(result.meeting.id);
+    }catch(error){
+      if(errorKey(error)==='attendance_source_changed')await loadJoinOptions();
+      $('joinStatus').textContent=t(errorKey(error));
+      throw error;
+    }
+  });
+});
+$('quickNatural').addEventListener('click',()=>{if(!working)showQuickPanel('quickNatural');});
+$('quickJoinManual').addEventListener('click',()=>{
+  if(working)return;
+  showQuickPanel('quickNatural');
+  if(planSource==='calendar'){
+    planSource='manual';
+    $('intent').value=manualDraft;
+    renderCalendarInput();
+  }
+  tell('quickJoinManualHint');
+});
+$('intentForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  if(planSource==='calendar')return perform(reviewExport);
+  return analysePlan($('intent').value);
 });
 $('planSource').addEventListener('change',()=>{
   if(working)return;
@@ -716,13 +796,13 @@ function rowsPerPage(){
 }
 function tableMarkup(headers,rows,manage=false){
   if(!rows.length)return '<div class="empty">'+t('noRows')+'</div>';
-  return '<div class="tableBox '+(manage?'liveTable':'')+'"><table><thead><tr>'+headers.map(h=>'<th>'+escape(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.map((r,i)=>'<tr>'+r.cells.map(c=>'<td><span class="cellValue" title="'+escape(c)+'">'+escape(c)+'</span></td>').join('')+'<td><div class="rowActions"><button data-row="'+i+'" data-label="view">'+t('view')+'</button>'+(manage?(r.detail.deleted?'<button data-row="'+i+'" data-admin-action="restore">'+t('restoreReservation')+'</button><button class="danger" data-row="'+i+'" data-admin-action="purge">'+t('purgeReservation')+'</button>':(r.detail.status==='in_progress'?'<button data-row="'+i+'" data-admin-action="finish">'+t('adminFinish')+'</button>':'<button data-row="'+i+'" data-admin-action="edit">'+t('editReservation')+'</button>')+(r.detail.status==='reserved'?'<button data-row="'+i+'" data-admin-action="cancel">'+t('cancel')+'</button>':'')+'<button data-row="'+i+'" data-admin-action="delete">'+t('deleteReservation')+'</button>'):'')+'</div></td></tr>').join('')+'</tbody></table></div>';
+  return '<div class="tableBox '+(manage?'liveTable':'')+'"><table><thead><tr>'+headers.map(h=>'<th>'+escape(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.map((r,i)=>'<tr>'+r.cells.map(c=>'<td><span class="cellValue" title="'+escape(c)+'">'+escape(c)+'</span></td>').join('')+'<td><div class="rowActions"><button data-row="'+i+'" data-label="view">'+t('view')+'</button>'+(manage?(r.detail.deleted?'<button data-row="'+i+'" data-admin-action="restore">'+t('restoreReservation')+'</button><button class="danger" data-row="'+i+'" data-admin-action="purge">'+t('purgeReservation')+'</button>':(r.detail.status==='in_progress'?'<button data-row="'+i+'" data-admin-action="finish">'+t('adminFinish')+'</button>':r.detail.organizer_reservation_id?'':'<button data-row="'+i+'" data-admin-action="edit">'+t('editReservation')+'</button>')+(r.detail.status==='reserved'?'<button data-row="'+i+'" data-admin-action="cancel">'+t('cancel')+'</button>':'')+'<button data-row="'+i+'" data-admin-action="delete">'+t('deleteReservation')+'</button>'):'')+'</div></td></tr>').join('')+'</tbody></table></div>';
 }
 
 function liveTable(){
   const rows=workspace?.admin_crud?(liveData?.items??[]):workspace?.meetings??[];
   return {headers:[t('title'),t('room'),t('time'),t('bookedBy'),t('state'),t('details')],rows:rows.map(m=>({cells:[m.title,m.name,m.date+' '+m.time+'–'+m.end_time,
-    m.source==='attendance'?t('attendanceSource'):m.source==='preset'&&m.booked_by==='System'?t('presetSource'):m.booked_by??t('employeeA'),t(m.deleted?'deleted':meetingState(m))],detail:m}))};
+    m.source==='attendance'?t(m.organizer_reservation_id?'quickLinkedAttendance':'attendanceSource'):m.source==='preset'&&m.booked_by==='System'?t('presetSource'):m.booked_by??t('employeeA'),t(m.deleted?'deleted':meetingState(m))],detail:m}))};
 }
 async function loadReservations(){
   if(!admin||!workspace?.admin_crud)return;
@@ -1163,6 +1243,7 @@ window.addEventListener('pagehide',()=>{
 window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
 calendarUI=createCalendarUI({document,api,perform,getWorkspace:()=>workspace,getText:()=>t,isBusy:()=>working,
   onChange:sync,onReturn:date=>{
+    showQuickPanel('quickNatural');
     if(planSource==='manual')manualDraft=$('intent').value;
     planSource='calendar';
     const last=new Date(Date.parse(workspace.today)+30*86400000).toISOString().slice(0,10);

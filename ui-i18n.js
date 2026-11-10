@@ -592,6 +592,27 @@ const equipmentMessages={
   equipment_period:['コメントの提供期間内で有効な開始日・終了日を選んでください。','Choose valid dates within the supplied comment period.'],equipment_consent:['期間・モデルを確認し、企業コメントの送信確認にチェックしてください。','Check dates and model, and confirm sending company comments.'],equipment_changed:['元データが更新されました。「更新」で読み直してから分析してください。','Source data changed. Refresh before analyzing again.'],equipment_narrow_period:['コメントが200件を超えています。期間を短くしてください。','More than 200 comments. Choose a shorter period.'],equipment_tools:['設備コメント用MCPの準備に失敗しました。','Equipment feedback MCP could not be prepared.']
 };
 for(const [key,[ja,en]] of Object.entries(equipmentMessages)){messages.ja[key]=ja;messages.en[key]=en;}
+const quickMessages={
+  quickLabel:['今日の過ごし方','How would you like to work?'],
+  quickFocus:['集中したい','Focus today'],
+  quickTalk:['誰かと話したい','Talk with someone'],
+  quickJoin:['用事がある · 会議に参加','Join a meeting'],
+  quickNatural:['自然文・カレンダー','Write or import a plan'],
+  quickFocusHint:['今日の空きから、指定した時間使える静かな席を探します。','Find the earliest quiet desk available today for the chosen duration.'],
+  quickFindSeat:['この時間で探す','Find a quiet desk'],
+  quickNeedRoom:['会議室が必要','I need a meeting room'],
+  quickFindTalk:['話せる場所を探す','Find a place to talk'],
+  quickTalkArea:['会議室を使わない場合は、CONNECTエリアを候補にできます。空きの確認や予約は行っていません。','For an informal conversation, consider the demo CONNECT area. This suggestion does not check availability or reserve a space.'],
+  quickJoinSelect:['参加する会議','Meeting to join'],
+  quickJoinChoose:['会議を選ぶ','Select a meeting'],
+  quickJoinHint:['参加だけを登録します。元の会議室予約は変更しません。','Register your attendance. The organiser’s room booking stays in place.'],
+  quickJoinEmpty:['参加できる今後の会議がありません。','There are no upcoming meetings to join.'],
+  quickJoinManual:['一覧にない会議を入力','Enter a meeting not listed'],
+  quickJoinManualHint:['会議の予定を自然文で入力し、提案カードから「この会議は自分で予約しない」を選んでください。','Describe the meeting, then choose the option to attend without making a room booking.'],
+  quickLinkedAttendance:['元の予約に紐づく参加記録','Attendance linked to the original booking'],
+  attendance_source_changed:['元の予約が変更または取り消されました。参加先を確認してください。','The original booking changed or was cancelled. Check the meeting before joining.'],
+};
+for(const [key,[ja,en]] of Object.entries(quickMessages)){messages.ja[key]=ja;messages.en[key]=en;}
 messages.ja.privacy+=' 設備フィードバックの分析だけは、別途の送信確認後に企業提供コメント・日付・空間名・評価を送信します。';
 messages.en.privacy+=' Equipment feedback analysis separately sends supplied company comments, dates, space names and scores only after transmission confirmation.';
 
