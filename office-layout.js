@@ -81,8 +81,10 @@ function room(name,d,contents,lx,ly){
   const item=layoutRooms.find(r=>r.mapLabel===name),id=item?.id??'unbound-h';
   const status=states[id]??'unknown',label=locale==='en'?'Room':'会議室';
   const capacity=item?String(item.capacity)+(locale==='en'?' seats':'人'):'?';
+  // The marker says the room is not part of the simulation instead of showing a bare '?'.
+  const visibleCapacity=item?capacity:(locale==='en'?'N/A':'対象外');
   const captions=locale==='en'?{available:'Free now',reserved:'Booked, not started',in_progress:'In use',suggested:'Candidate',unknown:'Unbound'}:{available:'現在空き',reserved:'予約あり・未開始',in_progress:'使用中',suggested:'候補',unknown:'未確認'};
-  return `<g class="layoutRoom ${status}" tabindex="0" role="button" data-room="${id}" aria-label="${label} ${name} / ${capacity} / ${captions[status]}"><title>${label} ${name} / ${capacity} / ${captions[status]}</title>${path(d,'url(#room)','#b4c7bb',6)}${contents}<g class="roomMarker">${rect(lx-28,ly-22,56,42,'#284c4f')}${text(lx,ly,name,23,'#f6e7bd')}${text(lx,ly+15,capacity,11,'#f6e7bd')}</g></g>`;
+  return `<g class="layoutRoom ${status}" tabindex="0" role="button" data-room="${id}" aria-label="${label} ${name} / ${capacity} / ${captions[status]}"><title>${label} ${name} / ${capacity} / ${captions[status]}</title>${path(d,'url(#room)','#b4c7bb',6)}${contents}<g class="roomMarker">${rect(lx-36+3,ly-31+4,72,58,'#14292a')}${rect(lx-36,ly-31,72,58,'#284c4f','#f6e7bd55',2)}${text(lx,ly+1,name,28,'#f6e7bd')}${text(lx,ly+21,visibleCapacity,15,'#f6e7bd')}</g></g>`;
 }
 function meeting(){let s=floor('M 6 584 L 718 30 L 1161 598 L 1004 720 L 941 720 L 855 656 L 58 656 Z');
  s+=room('B','M 326 418 L 475 301 L 549 396 L 397 513 Z',conference(435,407,117,42,5,-38),438,355);

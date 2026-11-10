@@ -3,6 +3,8 @@ import { ApiSession, ReviewComparison } from './session.js';
 import { applyLanguage, translator, reservationStatusLabel, errorKey } from './ui-i18n.js';
 import { createCalendarUI } from './calendar-ui.js';
 import { createEquipmentFeedbackUI, renderSuggestionBoard, suggestionText } from './equipment-feedback-ui.js';
+import { createInsightsUI } from './insights-ui.js';
+import { createReplayUI } from './replay-ui.js';
 
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,7 +29,7 @@ let liveFilters=null,liveData=null,liveGeneration=0,adminEditing=null,adminDelet
 let bulkClear=null,bulkMode='clear';
 let notice = {key:admin?'adminReady':'ready',error:false}, chatText = '', chatTrace = null;
 let calendarUI=null;
-let equipmentUI=null;
+let equipmentUI=null,insightsUI=null,replayUI=null;
 const improvementScope=()=>$('improvementScope').value||'allocation';
 let planSource='manual',manualDraft='',calendarExport=null,calendarReviewReport=null,calendarRangeOpen=true;
 let joinOptions=[];
@@ -74,7 +76,7 @@ function renderCalendarInput(){
     $('calendarImportStatus').textContent=t(!calendarExport?'calendarExportFirst':stale?'calendarExportStale':!calendarExport.events.length?'calendarExportEmpty':'calendarExportReady')
       +(calendarExport&&!stale?' '+calendarExport.events.filter(e=>e.status==='active').length+' '+t('calendarExportItems'):'');
   }
-  if(!selected)$('intent').placeholder=t('planPlaceholder');
+  if(!selected)$('intent').placeholder=t('examplePrefix')+t('planPlaceholder');
   if(selected&&calendarReviewReport&&!stale)$('calendarImportStatus').textContent=t('calendarReviewCounts').replace('{new}',calendarReviewReport.newCount).replace('{reused}',calendarReviewReport.progress.total-calendarReviewReport.newCount);
   $('calendarTrace').hidden=!calendarReviewReport||!selected||stale;
   $('parseButton').disabled=working||(selected&&(!calendarExport||stale||!calendarExport.events.length));
@@ -327,7 +329,7 @@ function renderAgenda() {
   $('agendaPrevious').disabled=!items.length||agendaIndex===0||working;$('agendaNext').disabled=agendaIndex>=items.length-1||working;
   const item=items[agendaIndex];
   if(agendaTab!=='proposals')selectedBookingId=item?.id??null;
-  if(!item){$('agendaContent').innerHTML='<div class="empty"><span class="emptyGlyph" aria-hidden="true">▦</span><p>'+t(agendaTab==='proposals'?'noPlan':agendaTab==='history'?'emptyHistory':'emptyCurrent')+'</p></div>';return;}
+  if(!item){$('agendaContent').innerHTML='<div class="empty"><span class="emptyGlyph" aria-hidden="true">▦</span><p>'+t(agendaTab==='proposals'?'noPlan':agendaTab==='history'?'emptyHistory':'emptyCurrent')+'</p>'+(agendaTab==='proposals'?'<p class="small emptyHint">'+t('noPlanHint')+'</p>':'')+'</div>';return;}
   if(agendaTab!=='proposals'){
     const next=latestRecord(item),replaced=next?.id!==item.id||Boolean(item.replacement_id||item.replaced_by);
     const active=agendaTab==='bookings';
@@ -460,7 +462,7 @@ async function sync() {
   if(restarted){calendarExport=null;calendarReviewReport=null;}
   renderCalendarInput();
   if(deploymentChanged)setupLanguage();
-  if(changed){renderAgenda();renderMap();if($('roomDialog').open)renderRoomDetails();if(admin&&adminTab==='live'){if(result.admin_crud)await loadReservations();else renderAdmin();}else if(admin&&adminTab==='improvements')renderAdmin();else if(admin&&adminTab!=='ai')await runHistory();}
+  if(changed){renderAgenda();renderMap();if($('roomDialog').open)renderRoomDetails();if(admin&&adminTab==='live'){if(result.admin_crud)await loadReservations();else renderAdmin();}else if(admin&&adminTab==='improvements')renderAdmin();else if(admin&&adminTab==='insights')await insightsUI?.load();else if(admin&&adminTab!=='ai')await runHistory();}
   if($('detailDialog').open&&detail.improvement)renderDetail();
 }
 function showBooking(id){
@@ -1077,9 +1079,11 @@ function renderAdmin(){
   $('adminTitle').textContent=t(adminTab);
   $('adminDescription').textContent=t(adminTab==='comfort'?'comfortDescription':adminTab==='live'?(workspace?.admin_crud?'adminLiveHint':'liveDesc'):adminTab==='ai'?'currentAiNote':'currentDataNote');
   if(adminTab==='improvements')$('adminDescription').textContent=t('improvementDescription');
+  if(adminTab==='insights')$('adminDescription').textContent=t('insightsDescription');
+  if(adminTab==='replay')$('adminDescription').textContent=t('replayDescription');
   if(adminTab==='comfort'&&adminData?.result.excluded)$('adminDescription').textContent+=' '+t('comfortExcluded')+': '+Object.values(adminData.result.excluded).reduce((sum,n)=>sum+n,0);
   document.querySelectorAll('[data-admin]').forEach(el=>el.classList.toggle('active',el.dataset.admin===adminTab));
-  const query=!['live','ai','comfort','improvements','equipment'].includes(adminTab);
+  const query=!['live','ai','comfort','improvements','equipment','insights','replay'].includes(adminTab);
   $('equipmentForm').hidden=adminTab!=='improvements'||improvementScope()==='allocation';
   $('improvementForm').hidden=adminTab!=='improvements'||improvementScope()==='equipment';
   $('improvementAnalyze').hidden=improvementScope()!=='allocation';
@@ -1096,7 +1100,7 @@ function renderAdmin(){
   else if(adminTab==='comfort')document.querySelector('.adminNav [data-i18n="boundary"]').textContent=t('comfortSource');
   else document.querySelector('.adminNav [data-i18n="boundary"]').textContent=t('boundary');
   $('comfortThermal').classList.toggle('active',comfortMode==='thermal');$('comfortSurvey').classList.toggle('active',comfortMode==='survey');
-  $('adminTrace').hidden=adminTab==='comfort';
+  $('adminTrace').hidden=['comfort','insights','replay'].includes(adminTab);
   $('adminQuery').hidden=!query;$('adminAskForm').hidden=adminTab!=='ai';$('reviewTools').hidden=true;
   $('liveQuery').hidden=adminTab!=='live'||!workspace?.admin_crud;
   if(!$('liveRoom').options.length&&workspace){$('liveRoom').innerHTML='<option value="">'+t('allStates')+'</option>'+workspace.rooms.map(r=>'<option value="'+escape(r.id)+'">'+escape(r.name)+'</option>').join('');}
@@ -1111,6 +1115,8 @@ function renderAdmin(){
   $('adminTrace').disabled=false;
   $('adminMetrics').hidden=!metrics.length;$('adminMetrics').innerHTML=metrics.map(([label,value])=>'<div class="metric"><span>'+label+'</span><b>'+escape(value)+'</b></div>').join('');
   if(equipmentUI?.isActive()){equipmentUI.render();return;}
+  if(adminTab==='insights'){insightsUI?.render();return;}
+  if(adminTab==='replay'){replayUI?.render();return;}
   if(adminTab==='improvements'){
     const report=improvementReport;
     const facts=report?[[t('improvementEligible'),report.eligible_count],[t('improvementExcluded'),Object.values(report.excluded).reduce((n,x)=>n+x,0)],[t('improvementReviewRooms'),report.review_count]]:[];
@@ -1133,7 +1139,7 @@ function renderAdmin(){
 }
 function setAdminPager(count){$('adminPage').textContent=(adminPage+1)+' / '+count;$('adminPrevious').disabled=adminPage===0;$('adminNext').disabled=adminPage>=count-1;}
 async function runHistory(){
-  if(!admin||['live','ai','improvements'].includes(adminTab))return;
+  if(!admin||['live','ai','improvements','insights','replay'].includes(adminTab))return;
   const current=++historyGeneration,tab=adminTab;
   adminData=null;adminTrace=null;renderAdmin();
   if(tab==='comfort'){
@@ -1170,15 +1176,17 @@ for(const id of ['historyStart','historyEnd','minBookings','minUnused','minPerce
 $('spaceSearch').addEventListener('input',()=>{clearTimeout(historyFilterTimer);historyFilterTimer=setTimeout(()=>perform(runHistory),250);});
 async function refreshAdminSection() {
   if (adminTab === 'improvements' && improvementScope() !== 'allocation') await equipmentUI.load();
+  else if (adminTab === 'insights') await insightsUI.load();
+  else if (adminTab === 'replay') await replayUI.load();
   else if (adminTab === 'live') await loadReservations();
   else await runHistory();
 }
 document.querySelectorAll('[data-admin]').forEach(button=>button.addEventListener('click',()=>{
-  equipmentUI?.leave();
+  equipmentUI?.leave();replayUI?.stop();
   historyGeneration++;adminTab=button.dataset.admin;adminPage=0;adminData=null;adminTrace=null;renderAdmin();
   if (adminTab !== 'ai' && (adminTab !== 'improvements' || improvementScope() !== 'allocation')) perform(refreshAdminSection);
 }));
-$('adminRefresh').addEventListener('click',()=>perform(async()=>{if(equipmentUI?.isActive()){await equipmentUI.load();return;}if(adminTab==='live'){await sync();if(workspace?.admin_crud)await loadReservations();}else if(adminTab!=='ai')await runHistory();}));
+$('adminRefresh').addEventListener('click',()=>perform(async()=>{if(equipmentUI?.isActive()){await equipmentUI.load();return;}if(adminTab==='insights'){await sync();await insightsUI.load();return;}if(adminTab==='replay'){await replayUI.load();return;}if(adminTab==='live'){await sync();if(workspace?.admin_crud)await loadReservations();}else if(adminTab!=='ai')await runHistory();}));
 $('adminPrevious').addEventListener('click',()=>{if(equipmentUI?.isActive()){equipmentUI.next(-1);return;}adminPage--;renderAdmin();});
 $('adminNext').addEventListener('click',()=>{if(equipmentUI?.isActive()){equipmentUI.next(1);return;}adminPage++;renderAdmin();});
 $('improvementScope').addEventListener('change',()=>{
@@ -1254,6 +1262,11 @@ calendarUI=createCalendarUI({document,api,perform,getWorkspace:()=>workspace,get
 equipmentUI=createEquipmentFeedbackUI({document,api,perform,getText:()=>t,getLocale:()=>locale,isActive:()=>admin&&adminTab==='improvements'&&improvementScope()!=='allocation',getWorkspace:()=>workspace,isCompact:()=>innerHeight<=500,isBusy:()=>working,session:apiSession,tell,
   showEvidence:(title,text)=>{showDetail(title,text);detail.equipment=true;},
   clearEvidence:()=>{if(detail.equipment){detail={title:'',text:'',page:0};$('detailTitle').textContent='';$('detailText').textContent='';$('detailDialog').close();}}});
+replayUI=createReplayUI({document,api,perform,getText:()=>t,getLocale:()=>locale,isActive:()=>admin&&adminTab==='replay',setPager:setAdminPager});
+insightsUI=createInsightsUI({document,api,perform,getText:()=>t,getLocale:()=>locale,isActive:()=>admin&&adminTab==='insights',getWorkspace:()=>workspace,
+  setPager:setAdminPager,
+  onInvestigate:period=>{equipmentUI?.leave();$('improvementScope').value='allocation';$('improvementStart').value=period.start_date;$('improvementEnd').value=period.end_date;
+    historyGeneration++;adminTab='improvements';adminPage=0;adminData=null;adminTrace=null;renderAdmin();}});
 if(!$('improvementScope').value)$('improvementScope').value='allocation';
 setupLanguage();
 try{await loadLocalSettings();}catch(error){showError(error);}

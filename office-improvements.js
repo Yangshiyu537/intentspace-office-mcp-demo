@@ -1,5 +1,5 @@
 // Reservation-fit analysis only. Planned headcounts are not measured occupancy.
-export function analyzeRoomFit({rooms, reservations}, period) {
+export function analyzeRoomFit({rooms, reservations}, period, {roomMetrics} = {}) {
   const rule = {min_room_reservations:3, min_oversized:3, min_oversized_percent:50, max_people:4, min_capacity:8, max_capacity_ratio:0.5};
   const inventory = new Map(rooms.map(room => [room.id, room]));
   const excluded = {deleted:0, cancelled:0, attendance:0, preset:0, desk:0, invalid:0, duplicate:0};
@@ -24,6 +24,9 @@ export function analyzeRoomFit({rooms, reservations}, period) {
   for (const room of rooms.filter(room => room.kind === 'meeting' && room.capacity >= rule.min_capacity)) {
     const records = eligible.filter(record => record.space_id === room.id);
     const oversized = records.filter(record => record.people <= rule.max_people && record.people / room.capacity <= rule.max_capacity_ratio);
+    const metrics = {total:records.length, oversized_count:oversized.length,
+      oversized_percent:records.length ? Math.round(oversized.length / records.length * 100) : null};
+    roomMetrics?.set(room.id, metrics);
     if (records.length < rule.min_room_reservations || oversized.length < rule.min_oversized
       || oversized.length * 100 < records.length * rule.min_oversized_percent) continue;
     const evidence = oversized.map(record => {
@@ -39,7 +42,7 @@ export function analyzeRoomFit({rooms, reservations}, period) {
     items.push({finding_id:'room-fit:'+room.id, room_id:room.id, name:room.name, capacity:room.capacity,
       finding_type:'small_party_in_large_room',capacity_relation:'planned_people_below_capacity',
       planned_people_range:{min:Math.min(...oversized.map(record=>record.people)),max:Math.max(...oversized.map(record=>record.people))},
-      total:records.length, oversized_count:oversized.length, oversized_percent:Math.round(oversized.length / records.length * 100),
+      ...metrics,
       alternative_count:alternativeCount, action:alternativeCount ? 'review_allocation' : 'investigate_constraints',
       evidence_total:evidence.length, evidence:evidence.slice(0,10)});
   }
